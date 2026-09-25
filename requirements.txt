@@ -1,3 +1,10 @@
+
+fastapi
+uvicorn[standard]
+qdrant-client
+openai
+python-dotenv
+sentence-transformers
 requests
 beautifulsoup4
 lxml
