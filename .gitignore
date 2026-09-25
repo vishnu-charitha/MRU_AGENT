@@ -1,0 +1,30 @@
+# Environments
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+venv/
+env/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+npm-debug.log*
+
+# Local knowledge-base data
+data/
+
+# Output & Scratch
+output/
+scratch/
+data/embeddings/
+data/chunks/
+data/cleaned/
+data/final/
+
+# Mac
+.DS_Store

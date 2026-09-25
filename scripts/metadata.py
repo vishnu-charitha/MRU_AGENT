@@ -1,0 +1,25 @@
+def get_base_metadata():
+    return {
+        "document_id": None,
+        "source_id": None,
+        "title": None,
+        "content": None,
+        "category": None,
+        "subcategory": None,
+        "program": None,
+        "regulation": None,
+        "department": None,
+        "campus": "main",
+        "academic_year": None,
+        "semester": None,
+        "document_type": None,
+        "source_url": None,
+        "source_title": None,
+        "page_number": None,
+        "published_date": None,
+        "effective_date": None,
+        "status": "active",
+        "source_type": "official_mrdu",
+        "retrieved_at": None,
+        "requires_manual_review": False
+    }
