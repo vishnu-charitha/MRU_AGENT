@@ -38,11 +38,11 @@ def health_check():
 @app.get("/api/health")
 def api_health_check():
     try:
-        # Check Qdrant connectivity
         service = get_rag_service()
-        # A simple check to see if client is alive
-        service.qdrant_client.get_collection(service.qdrant_collection)
-        return {"status": "ok", "qdrant": "connected"}
+        if hasattr(service, 'qdrant_client'):
+            service.qdrant_client.get_collection(service.qdrant_collection)
+            return {"status": "ok", "qdrant": "connected"}
+        return {"status": "ok", "qdrant": "unconfigured"}
     except Exception as e:
         logger.error(f"Health check failed: {e}")
-        return {"status": "error", "qdrant": "disconnected"}
+        return {"status": "error", "message": str(e), "qdrant": "disconnected"}

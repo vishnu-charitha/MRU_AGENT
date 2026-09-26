@@ -87,15 +87,77 @@ function App() {
       
       if (!response.ok) throw new Error('Network response was not ok');
       
-      const data = await response.json();
+      setIsLoading(false); // Remove typing indicator once stream starts
       
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.answer,
-        sources: data.sources || [],
-        out_of_scope: data.out_of_scope_detected
+        content: '',
+        sources: [],
+        out_of_scope: false
       }]);
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      let accumulatedContent = '';
+      let buffer = '';
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          
+          // Keep the last potentially incomplete line in the buffer
+          buffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const data = JSON.parse(line);
+              
+              let updatedSources = null;
+              let clearSources = false;
+              
+              if (data.sources) {
+                updatedSources = data.sources;
+              }
+              
+              if (data.error || data.detail) {
+                accumulatedContent = data.error || data.detail;
+              } else if (data.answer) {
+                accumulatedContent = data.answer;
+              } else if (data.answer_chunk) {
+                accumulatedContent += data.answer_chunk;
+              }
+              
+              if (data.clear_sources) {
+                clearSources = true;
+              }
+              
+              setMessages(prev => {
+                const newMessages = [...prev];
+                const lastMsg = { ...newMessages[newMessages.length - 1] };
+                
+                if (updatedSources) {
+                  lastMsg.sources = updatedSources;
+                }
+                lastMsg.content = accumulatedContent;
+                if (clearSources) {
+                  lastMsg.sources = [];
+                }
+                
+                newMessages[newMessages.length - 1] = lastMsg;
+                return newMessages;
+              });
+            } catch (e) {
+              console.error("Error parsing JSON chunk:", e, line);
+            }
+          }
+        }
+      }
     } catch (error) {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
@@ -103,8 +165,8 @@ function App() {
         content: 'Unable to connect to MRDU Assistant. Please make sure the backend server is running.',
         isError: true
       }]);
-    } finally {
       setIsLoading(false);
+    } finally {
       // Give focus back to input on desktop
       if (window.innerWidth > 1024) {
         inputRef.current?.focus();

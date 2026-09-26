@@ -1,11 +1,7 @@
 fastapi
 uvicorn[standard]
 qdrant-client
+sentence-transformers
 openai
 python-dotenv
-sentence-transformers
 requests
-beautifulsoup4
-lxml
-pypdf
-python-dateutil

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 import logging
 from ..models import ChatRequest, ChatResponse, SourceModel
 from ..services.rag_service import get_rag_service
@@ -21,14 +22,13 @@ async def chat_endpoint(request: ChatRequest):
             campus=request.campus,
             category=request.category,
             program=request.program,
-            regulation=request.regulation
+            regulation=request.regulation,
+            limit=3
         )
         
-        result = rag_service.generate_answer(request.question, hits)
-        
-        return ChatResponse(
-            answer=result["answer"],
-            sources=[SourceModel(**s) for s in result["sources"]]
+        return StreamingResponse(
+            rag_service.generate_answer_stream(request.question, hits),
+            media_type="application/x-ndjson"
         )
     except Exception as e:
         logger.error(f"Error during RAG generation: {e}")
