@@ -157,6 +157,7 @@ header {
   min-height: calc(100vh - 120px);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 40px 5%;
   background-image: linear-gradient(to right, rgba(5,8,20,0.95) 0%, rgba(5,8,20,0.7) 40%, rgba(5,8,20,0.2) 100%), 
                     linear-gradient(to top, rgba(5,8,20,0.8) 0%, transparent 20%),
@@ -167,10 +168,10 @@ header {
 }
 
 .hero-content {
-  flex: 1;
-  max-width: 550px;
+  flex: 0 0 55%;
+  max-width: 60%;
   z-index: 2;
-  margin-right: 40px;
+  padding-right: 40px;
 }
 
 .hero-label {
@@ -269,9 +270,9 @@ header {
 
 /* Chatbot Panel */
 .chatbot-panel {
-  width: 45%;
-  min-width: 400px;
-  max-width: 500px;
+  flex: 0 0 40%;
+  min-width: 380px;
+  max-width: 550px;
   height: 75vh;
   background: var(--glass-bg);
   backdrop-filter: blur(16px);
@@ -620,9 +621,10 @@ header {
   }
   
   .hero-content {
-    margin-right: 0;
+    padding-right: 0;
     text-align: center;
     max-width: 100%;
+    flex: 1 1 100%;
   }
   
   .hero-buttons {
@@ -634,6 +636,7 @@ header {
   }
   
   .chatbot-panel {
+    flex: 1 1 100%;
     width: 100%;
     max-width: 100%;
     height: 70vh;
