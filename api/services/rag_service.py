@@ -75,7 +75,7 @@ class RAGService:
             }
             
         # 2. Quality Threshold Guard
-        if not hits or hits[0].score < 0.45:
+        if not hits or hits[0].score < 0.40:
             return {
                 "answer": "I couldn't find enough information in the MRDU knowledge base to answer that accurately.",
                 "sources": []
@@ -137,7 +137,7 @@ Context:
         else:
             llm_answer = "API key missing. Unable to generate answer."
         
-        if "I couldn't find enough information" in llm_answer:
+        if llm_answer.strip().startswith("I couldn't find enough information"):
             sources = []
             
         return {
@@ -154,7 +154,7 @@ Context:
             return
             
         # 2. Quality Threshold Guard
-        if not hits or hits[0].score < 0.45:
+        if not hits or hits[0].score < 0.40:
             yield json.dumps({"answer": "I couldn't find enough information in the MRDU knowledge base to answer that accurately.", "sources": []}) + "\n"
             return
             
@@ -221,7 +221,7 @@ Context:
                     full_answer += content_piece
                     yield json.dumps({"answer_chunk": content_piece}) + "\n"
             
-            if "I couldn't find enough information" in full_answer:
+            if full_answer.strip().startswith("I couldn't find enough information"):
                 yield json.dumps({"clear_sources": True}) + "\n"
                 
         else:

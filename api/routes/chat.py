@@ -23,7 +23,7 @@ async def chat_endpoint(request: ChatRequest):
             category=request.category,
             program=request.program,
             regulation=request.regulation,
-            limit=3
+            limit=5
         )
         
         return StreamingResponse(
