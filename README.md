@@ -43,3 +43,27 @@ npm run dev
 
 ## Deployment
 See [DEPLOYMENT.md](DEPLOYMENT.md) for full deployment instructions, environment variable configurations, and CI/CD steps.
+
+## Evaluation
+A structured evaluation pipeline using Ragas is included to measure retrieval and generation performance.
+
+### Setup
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   pip install ragas datasets langchain-openai
+   ```
+2. Configure environment variables in `.env` (requires `OPENAI_API_KEY` for the LLM judge).
+
+### Running Evaluations
+- **Run full evaluation**: `python scripts/evaluate_rag.py`
+- **Run subset (e.g. 5 questions)**: `python scripts/evaluate_rag.py --subset 5`
+
+### Reading Reports
+Results are saved to:
+- `evaluation/results/evaluation_report.md` (Summary report)
+- `evaluation/results/latest_results.json` (Summary JSON)
+- `evaluation/results/per_question_results.jsonl` (Detailed per-question breakdown)
+
+### Baseline vs Updated
+Run the evaluation on your initial system to establish a baseline. After applying fixes to the pipeline, rerun the same evaluation script and compare the metrics in `evaluation_report.md`.

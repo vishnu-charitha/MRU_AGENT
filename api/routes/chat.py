@@ -15,7 +15,7 @@ async def chat_endpoint(request: ChatRequest):
     except Exception as e:
         logger.error(f"Service initialization error: {e}")
         raise HTTPException(status_code=503, detail="RAG service is currently unavailable.")
-        
+
     try:
         hits = rag_service.retrieve(
             query=request.question,
@@ -25,9 +25,9 @@ async def chat_endpoint(request: ChatRequest):
             regulation=request.regulation,
             limit=5
         )
-        
+
         return StreamingResponse(
-            rag_service.generate_answer_stream(request.question, hits),
+            rag_service.generate_answer_stream(request.question, hits, history=request.history),
             media_type="application/x-ndjson"
         )
     except Exception as e:

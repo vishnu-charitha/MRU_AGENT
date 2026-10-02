@@ -12,79 +12,102 @@ qdrant_url = os.getenv('QDRANT_URL')
 qdrant_key = os.getenv('QDRANT_API_KEY')
 
 print("Connecting to Qdrant...")
-client = QdrantClient(url=qdrant_url, api_key=qdrant_key)
-collection_name = 'mrdu_knowledge_base'
+client = QdrantClient(url=qdrant_url, api_key=qdrant_key, timeout=60)
+collection_name = 'mrdu_knowledge_base_v2'
 
 collections = [c.name for c in client.get_collections().collections]
-if collection_name not in collections:
-    print(f"Creating collection {collection_name}...")
-    client.create_collection(
-        collection_name=collection_name,
-        vectors_config=VectorParams(size=384, distance=Distance.COSINE),
-    )
+if collection_name in collections:
+    print(f"Deleting old collection {collection_name} to re-index...")
+    client.delete_collection(collection_name)
 
-print("Loading embedding model...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
+print(f"Creating collection {collection_name}...")
+client.create_collection(
+    collection_name=collection_name,
+    vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+)
+
+
 
 print("Reading and parsing Markdown...")
 filename = 'MRDU_Chatbot_Knowledge_Base_100pages.md'
 with open(filename, 'r', encoding='utf-8') as f:
     text = f.read()
 
-# Custom Markdown Chunker
+try:
+    from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
+except ImportError:
+    from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
+
+# Structural chunking by Markdown headers
+headers_to_split_on = [
+    ("#", "Header 1"),
+    ("##", "Header 2"),
+    ("###", "Header 3"),
+]
+markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
+
+# Pre-split on Header 1 to prevent catastrophic backtracking in MarkdownHeaderTextSplitter regex
+raw_sections = text.split('\n# ')
+md_header_splits = []
+for i, section_text in enumerate(raw_sections):
+    if i > 0:
+        section_text = '# ' + section_text
+    md_header_splits.extend(markdown_splitter.split_text(section_text))
+
+# Further recursive split for large chunks to respect embedding limits safely
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=150
+)
+docs = text_splitter.split_documents(md_header_splits)
+
 chunks = []
-# split by H2
-sections = re.split(r'\n(?=## )', text)
+for doc in docs:
+    chunk_content = doc.page_content.strip()
+    if not chunk_content: continue
 
-for sec in sections:
-    if not sec.strip(): continue
-    lines = sec.strip().split('\n')
-    header = lines[0].strip('# ')
-    content = '\n'.join(lines[1:]).strip()
-    
-    # split further by H3
-    subsections = re.split(r'\n(?=### )', content)
-    for subsec in subsections:
-        if not subsec.strip(): continue
-        sub_lines = subsec.strip().split('\n')
-        sub_header = sub_lines[0].strip('# ') if subsec.startswith('###') else header
-        
-        chunk_content = subsec.strip()
-        if not chunk_content: continue
-        
-        # Metadata extraction
-        lcontent = chunk_content.lower()
-        campus = 'tirupati' if 'tirupati' in lcontent else 'main'
-        program = 'B.Tech' if 'b.tech' in lcontent else ('M.Tech' if 'm.tech' in lcontent else None)
-        regulation = 'MR24' if 'mr24' in lcontent else ('MR22' if 'mr22' in lcontent else ('MR20' if 'mr20' in lcontent else None))
-        category = 'Admissions' if 'admission' in lcontent else ('Examinations' if 'exam' in lcontent else 'General')
-        
-        title = f"{header} - {sub_header}" if header != sub_header else header
-        
-        chunk_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk_content))
-        chunks.append({
-            'chunk_id': chunk_id,
-            'content': chunk_content,
-            'title': title,
-            'section': header,
-            'campus': campus,
-            'program': program,
-            'regulation': regulation,
-            'category': category,
-            'source_url': 'https://mrdu.edu.in',
-            'source_file': 'MRDU_Chatbot_Knowledge_Base_100pages.md'
-        })
+    metadata = doc.metadata
+    h1 = metadata.get("Header 1", "")
+    h2 = metadata.get("Header 2", "")
+    h3 = metadata.get("Header 3", "")
 
-print(f"Total chunks created: {len(chunks)}")
+    title_parts = [h for h in [h1, h2, h3] if h]
+    title = " - ".join(title_parts) if title_parts else "General Info"
+    section = h1 or h2 or "General"
 
+    # Metadata extraction
+    lcontent = (title + " " + chunk_content).lower()
+    campus = 'tirupati' if 'tirupati' in lcontent else 'main'
+    program = 'B.Tech' if 'b.tech' in lcontent else ('M.Tech' if 'm.tech' in lcontent else None)
+    regulation = 'MR24' if 'mr24' in lcontent else ('MR22' if 'mr22' in lcontent else ('MR20' if 'mr20' in lcontent else None))
+    category = 'Admissions' if 'admission' in lcontent else ('Examinations' if 'exam' in lcontent else 'General')
+
+    chunk_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk_content))
+    chunks.append({
+        'chunk_id': chunk_id,
+        'content': chunk_content,
+        'title': title,
+        'section': section,
+        'campus': campus,
+        'program': program,
+        'regulation': regulation,
+        'category': category,
+        'source_url': 'https://mrdu.edu.in',
+        'source_file': 'MRDU_Chatbot_Knowledge_Base_100pages.md'
+    })
+
+print(f"Total structured chunks created: {len(chunks)}")
+
+print("Loading embedding model...")
+model = SentenceTransformer('all-MiniLM-L6-v2')
 print("Embedding and uploading chunks...")
-batch_size = 50
+batch_size = 25
 total_uploaded = 0
 for i in range(0, len(chunks), batch_size):
     batch = chunks[i:i+batch_size]
     texts = [c['content'] for c in batch]
     embeddings = model.encode(texts, normalize_embeddings=True).tolist()
-    
+
     points = []
     for j, c in enumerate(batch):
         points.append(PointStruct(

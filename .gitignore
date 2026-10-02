@@ -28,3 +28,10 @@ data/final/
 
 # Mac
 .DS_Store
+
+# Local evaluation environment and temporary outputs
+.venv-eval/
+batch_search_output.txt
+verify_dump.json
+evaluation/datasets/mrdu_eval_backup*.jsonl
+evaluation/results/
