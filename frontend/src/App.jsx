@@ -463,7 +463,7 @@ function App() {
                 disabled={isLoading || isStreaming}
                 aria-label="Chat input"
               />
-              <Paperclip size={18} style={{ color: 'rgba(255,255,255,0.4)', margin: '0 10px', cursor: 'pointer' }} aria-label="Attach file" />
+              <Paperclip size={18} style={{ color: 'var(--text-muted)', margin: '0 10px', cursor: 'pointer' }} aria-label="Attach file" />
               <button 
                 className="send-btn" 
                 onClick={() => handleSend(input)} 

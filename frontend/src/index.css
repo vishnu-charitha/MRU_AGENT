@@ -1,15 +1,23 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --mrdu-navy: #0A1128;
-  --mrdu-navy-dark: #050814;
-  --mrdu-orange: #FF5A00;
-  --mrdu-orange-hover: #E04D00;
-  --mrdu-red: #D32F2F;
-  --text-light: #F8F9FA;
-  --text-muted: #A0AABF;
-  --glass-bg: rgba(10, 15, 22, 0.88);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --primary: #0055ff;
+  --primary-hover: #0044cc;
+  --primary-dark: #002244;
+  --primary-darker: #001122;
+  --secondary: #ffcc00;
+  --secondary-hover: #e6b800;
+  --accent: #e60000;
+  --background: #f8f9fa;
+  --surface: #ffffff;
+  --text-primary: #002244;
+  --text-light: #ffffff;
+  --text-muted: #8ba2b8;
+  --border: #0055ff;
+  --border-light: rgba(0, 85, 255, 0.2);
+  --success: #2e7d32;
+  --glass-bg: rgba(0, 34, 68, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.15);
 }
 
 * {
@@ -20,8 +28,8 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background-color: var(--mrdu-navy-dark);
-  color: var(--text-light);
+  background-color: var(--background);
+  color: var(--text-primary);
   overflow-x: hidden;
 }
 
@@ -35,10 +43,11 @@ header {
   display: flex;
   justify-content: space-between;
   padding: 10px 5%;
-  background: var(--mrdu-navy);
+  background: var(--primary-dark);
+  color: var(--text-light);
   font-size: 13px;
   font-weight: 500;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 2px solid var(--secondary);
 }
 
 .top-nav-left {
@@ -63,17 +72,18 @@ header {
 }
 
 .apply-btn {
-  background: var(--mrdu-orange);
-  color: white;
+  background: var(--secondary);
+  color: var(--primary-dark);
   padding: 5px 16px;
   border-radius: 4px;
   text-decoration: none;
-  font-weight: 600;
-  transition: background 0.2s;
+  font-weight: 700;
+  transition: all 0.2s;
 }
 
 .apply-btn:hover {
-  background: var(--mrdu-orange-hover);
+  background: var(--secondary-hover);
+  transform: translateY(-1px);
 }
 
 .social-icons {
@@ -91,8 +101,8 @@ header {
   justify-content: space-between;
   align-items: center;
   padding: 16px 5%;
-  background: white;
-  color: var(--mrdu-navy);
+  background: var(--surface);
+  color: var(--primary-dark);
   box-shadow: 0 4px 20px rgba(0,0,0,0.1);
   position: relative;
 }
@@ -114,13 +124,13 @@ header {
   font-size: 18px;
   font-weight: 800;
   margin: 0;
-  color: var(--mrdu-navy);
+  color: var(--primary-dark);
   letter-spacing: 0.5px;
 }
 
 .logo-text p {
   font-size: 10px;
-  color: var(--mrdu-red);
+  color: var(--accent);
   margin: 0;
   font-weight: 700;
   letter-spacing: 0.5px;
@@ -130,7 +140,7 @@ header {
   display: none;
   background: none;
   border: none;
-  color: var(--mrdu-navy);
+  color: var(--primary-dark);
   cursor: pointer;
 }
 
@@ -142,13 +152,15 @@ header {
 }
 
 .nav-links a {
-  color: var(--mrdu-navy);
+  color: var(--primary-dark);
   text-decoration: none;
   transition: color 0.2s;
 }
 
 .nav-links a:hover {
-  color: var(--mrdu-orange);
+  color: var(--primary);
+  border-bottom: 2px solid var(--secondary);
+  padding-bottom: 2px;
 }
 
 /* Hero Section */
@@ -159,9 +171,7 @@ header {
   align-items: center;
   justify-content: space-between;
   padding: 40px 5%;
-  background-image: linear-gradient(to right, rgba(5,8,20,0.95) 0%, rgba(5,8,20,0.7) 40%, rgba(5,8,20,0.2) 100%), 
-                    linear-gradient(to top, rgba(5,8,20,0.8) 0%, transparent 20%),
-                    url('/hero-bg.jpg');
+  background-image: linear-gradient(90deg, rgba(0, 34, 68, 0.72), rgba(0, 34, 68, 0.18)), url('/hero-bg.jpg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -176,7 +186,7 @@ header {
 
 .hero-label {
   display: inline-block;
-  color: var(--mrdu-orange);
+  color: var(--primary);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -218,40 +228,44 @@ header {
 }
 
 .btn-primary {
-  background: var(--mrdu-orange);
-  color: white;
+  background: var(--primary);
+  color: var(--text-light);
   border: none;
   padding: 14px 28px;
   font-size: 15px;
   font-weight: 600;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
   display: flex;
   align-items: center;
   gap: 8px;
+  box-shadow: 0 4px 15px rgba(0, 85, 255, 0.4);
 }
 
 .btn-primary:hover {
-  background: var(--mrdu-orange-hover);
-  transform: translateY(-2px);
+  background: var(--primary-hover);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0, 85, 255, 0.6);
 }
 
 .btn-secondary {
-  background: rgba(255,255,255,0.05);
-  color: white;
-  border: 1px solid rgba(255,255,255,0.2);
+  background: var(--secondary);
+  color: var(--primary-dark);
+  border: none;
   padding: 14px 28px;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(255, 204, 0, 0.3);
 }
 
 .btn-secondary:hover {
-  background: rgba(255,255,255,0.1);
-  border-color: rgba(255,255,255,0.4);
+  background: var(--secondary-hover);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(255, 204, 0, 0.5);
 }
 
 .hero-stats {
@@ -274,16 +288,15 @@ header {
   min-width: 380px;
   max-width: 550px;
   height: 75vh;
-  background: var(--glass-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--glass-border);
-  border-radius: 24px;
-  box-shadow: 0 24px 48px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 34, 68, 0.15);
   display: flex;
   flex-direction: column;
   z-index: 10;
   overflow: hidden;
+  color: var(--text-primary);
 }
 
 .chatbot-header {
@@ -291,8 +304,9 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid var(--border-light);
+  background: var(--primary-dark);
+  color: var(--text-light);
 }
 
 .chat-header-left {
@@ -332,20 +346,20 @@ header {
 
 .chat-title p {
   font-size: 11px;
-  color: var(--text-muted);
+  color: rgba(255,255,255,0.7);
   margin: 0;
 }
 
 .chat-header-right {
   display: flex;
   gap: 12px;
-  color: var(--text-muted);
+  color: rgba(255,255,255,0.7);
 }
 
 .chat-header-right button {
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: rgba(255,255,255,0.7);
   cursor: pointer;
   transition: color 0.2s;
   padding: 4px;
@@ -356,7 +370,7 @@ header {
 }
 
 .new-chat-btn:hover {
-  color: var(--mrdu-orange) !important;
+  color: var(--primary) !important;
 }
 
 .chat-body {
@@ -403,14 +417,15 @@ header {
 }
 
 .assistant .msg-bubble {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--background);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
   border-bottom-left-radius: 4px;
 }
 
 .user .msg-bubble {
-  background: var(--mrdu-orange);
-  color: white;
+  background: var(--primary);
+  color: var(--text-light);
   border-bottom-right-radius: 4px;
 }
 
@@ -453,11 +468,11 @@ header {
 }
 
 .quick-q-btn {
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--surface);
+  border: 1px solid var(--border-light);
   border-radius: 10px;
   padding: 12px;
-  color: var(--text-light);
+  color: var(--primary-dark);
   font-size: 13px;
   font-weight: 500;
   display: flex;
@@ -469,13 +484,13 @@ header {
 }
 
 .quick-q-btn:hover {
-  background: rgba(255, 90, 0, 0.08);
-  border-color: rgba(255, 90, 0, 0.3);
+  background: rgba(0, 85, 255, 0.05);
+  border-color: var(--primary);
   transform: translateY(-2px);
 }
 
 .quick-q-icon {
-  color: var(--mrdu-orange);
+  color: var(--primary);
   display: flex;
   align-items: center;
 }
@@ -505,19 +520,20 @@ header {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--surface);
+  border: 1px solid var(--border-light);
   padding: 6px 10px;
   border-radius: 6px;
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--primary-dark);
   text-decoration: none;
   transition: all 0.2s;
 }
 
 .source-chip:hover {
-  background: rgba(255,255,255,0.08);
-  color: white;
+  background: var(--primary);
+  color: var(--text-light);
+  border-color: var(--primary);
 }
 
 .source-chip-text {
@@ -529,35 +545,35 @@ header {
 
 .chat-input-area {
   padding: 20px;
-  border-top: 1px solid rgba(255,255,255,0.05);
-  background: rgba(0,0,0,0.2);
+  border-top: 1px solid var(--border-light);
+  background: var(--surface);
 }
 
 .input-wrapper {
   display: flex;
   align-items: center;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--surface);
+  border: 2px solid var(--border-light);
   border-radius: 12px;
   padding: 6px 6px 6px 16px;
   transition: border-color 0.3s;
 }
 
 .input-wrapper:focus-within {
-  border-color: rgba(255, 90, 0, 0.5);
+  border-color: var(--primary);
 }
 
 .input-wrapper input {
   flex: 1;
   background: transparent;
   border: none;
-  color: white;
+  color: var(--text-primary);
   font-size: 14px;
   outline: none;
 }
 
 .input-wrapper input::placeholder {
-  color: rgba(255,255,255,0.3);
+  color: var(--text-muted);
 }
 
 .input-wrapper input:disabled {
@@ -565,7 +581,7 @@ header {
 }
 
 .send-btn {
-  background: var(--mrdu-orange);
+  background: var(--primary);
   border: none;
   width: 36px;
   height: 36px;
@@ -579,7 +595,7 @@ header {
 }
 
 .send-btn:hover:not(:disabled) {
-  background: var(--mrdu-orange-hover);
+  background: var(--primary-hover);
 }
 
 .send-btn:disabled {
@@ -692,9 +708,9 @@ header {
 }
 
 .followup-chip {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--mrdu-orange);
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  color: var(--primary);
   padding: 8px 12px;
   border-radius: 16px;
   font-size: 13px;
@@ -705,8 +721,9 @@ header {
 }
 
 .followup-chip:hover:not(:disabled) {
-  background: rgba(246, 107, 30, 0.1);
-  border-color: rgba(246, 107, 30, 0.3);
+  background: var(--primary);
+  color: var(--text-light);
+  border-color: var(--primary);
   transform: translateY(-1px);
 }
 
