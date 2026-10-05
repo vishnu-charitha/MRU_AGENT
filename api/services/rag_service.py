@@ -22,7 +22,7 @@ class RAGService:
             logger.warning("Qdrant configuration is missing.")
         else:
             logger.info("Connecting to Qdrant...")
-            self.qdrant_client = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_key)
+            self.qdrant_client = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_key, timeout=60.0)
 
         logger.info(f"Loading embedding model: {self.model_name}")
         self.model = SentenceTransformer(self.model_name)
