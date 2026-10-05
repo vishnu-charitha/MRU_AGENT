@@ -73,7 +73,13 @@ def run_evaluation(dataset, subset_size=None):
         print("Warning: OPENROUTER_API_KEY not found. Ragas metrics will fail.")
         llm = None
     else:
-        openai_client = AsyncOpenAI(api_key=openrouter_key, base_url="https://openrouter.ai/api/v1", timeout=90.0, max_retries=1)
+        # AsyncOpenAI client has built-in exponential backoff with jitter and respects Retry-After headers when max_retries > 0
+        openai_client = AsyncOpenAI(
+            api_key=openrouter_key, 
+            base_url="https://openrouter.ai/api/v1", 
+            timeout=60.0, 
+            max_retries=5
+        )
         llm = llm_factory(
             model=os.getenv("OPENROUTER_MODEL", "google/gemma-4-31b-it"),
             client=openai_client
@@ -101,9 +107,13 @@ def run_evaluation(dataset, subset_size=None):
 
         # Call RAG pipeline
         hits = rag_service.retrieve(query=query)
-        response = rag_service.generate_answer(query=query, hits=hits, history=history)
-
-        answer = response['answer']
+        print(f"Retrieval complete for: {query[:30]}... ({len(hits)} hits)")
+        try:
+            response = rag_service.generate_answer(query=query, hits=hits, history=history)
+            answer = response['answer']
+        except Exception as e:
+            print(f"Generation failed: {e}")
+            answer = "API ERROR"
 
         # Extract contexts
         retrieved_contexts = []
@@ -136,7 +146,9 @@ def run_evaluation(dataset, subset_size=None):
     from ragas import RunConfig
 
     try:
-        run_config = RunConfig(timeout=90, max_retries=1, max_workers=1)
+        # We need a large overall timeout here to allow the AsyncOpenAI client to perform its own exponential backoff retries without being prematurely cancelled by Ragas.
+        timeout_val = float(os.getenv("EVAL_TIMEOUT", "300.0"))
+        run_config = RunConfig(timeout=timeout_val, max_retries=5, max_workers=1)
         ragas_result = evaluate(
             dataset=hf_dataset,
             metrics=metrics,
@@ -148,7 +160,7 @@ def run_evaluation(dataset, subset_size=None):
         print("Ragas Evaluation Complete.")
 
         df = ragas_result.to_pandas()
-        df.to_csv('evaluation/results/ragas_detailed_results.csv', index=False)
+        df.to_csv('evaluation/results/ragas_detailed_results_phase14.csv', index=False)
         for i, row in df.iterrows():
             eval_results[i]['context_precision'] = row.get('context_precision', None)
             eval_results[i]['context_recall'] = row.get('context_recall', None)
@@ -163,17 +175,17 @@ def run_evaluation(dataset, subset_size=None):
 def save_reports(eval_results, summary):
     os.makedirs('evaluation/results', exist_ok=True)
 
-    with open('evaluation/results/per_question_results.jsonl', 'w', encoding='utf-8') as f:
+    with open('evaluation/results/per_question_results_phase14.jsonl', 'w', encoding='utf-8') as f:
         for res in eval_results:
             f.write(json.dumps(res) + '\n')
 
-    with open('evaluation/results/summary.json', 'w', encoding='utf-8') as f:
+    with open('evaluation/results/summary_phase14.json', 'w', encoding='utf-8') as f:
         json.dump(summary, f, indent=4)
 
-    with open('evaluation/results/latest_results.json', 'w', encoding='utf-8') as f:
+    with open('evaluation/results/latest_results_phase14.json', 'w', encoding='utf-8') as f:
         json.dump(summary, f, indent=4)
 
-    report = f"# MRDU Chatbot Evaluation Report\n\n"
+    report = f"# MRDU Chatbot Evaluation Report (Phase 14)\n\n"
     report += f"**Date**: {datetime.now().isoformat()}\n\n"
     report += f"## Summary\n"
     report += f"- Total Questions Evaluated: {summary.get('total', 0)}\n"
@@ -186,7 +198,7 @@ def save_reports(eval_results, summary):
     report += "1. Verify the 'expected_answer' in mrdu_eval.jsonl manually against the 100-page knowledge base.\n"
     report += "2. Execute this runner fully to obtain the baseline.\n"
 
-    with open('evaluation/results/evaluation_report.md', 'w', encoding='utf-8') as f:
+    with open('evaluation/results/evaluation_report_phase14.md', 'w', encoding='utf-8') as f:
         f.write(report)
 
 if __name__ == "__main__":

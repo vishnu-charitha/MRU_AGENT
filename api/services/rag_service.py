@@ -60,13 +60,13 @@ class RAGService:
     - A complete question or topic phrase that names an information need expresses its own intent (for example, "How many seats are there in B.Tech EEE?", "fees for EEE", "eligibility for EEE", or "documents required"). Keep that intent, even if it differs from history.
     - A short entity/noun-phrase fragment without a requested information type (for example, "btech eee", "cse", "mtech", or "hostel") is a follow-up. Inherit the intent from the MOST RECENT preceding user question that clearly expressed one.
 
-    For follow-ups:
-    - The latest clear user intent takes precedence over every older topic. Do not let unrelated older turns override it.
-    - Use the assistant answer from that same turn only to clarify the topic/entity; it is supporting context, not a new intent.
-    - Replace the prior entity with the entity in the current query. If the current query only gives a specialization (such as "cse"), retain the degree/program from the relevant recent context.
+    For follow-ups and partial questions:
+    - The latest clear user intent takes precedence over every older topic.
+    - If the current query specifies a specialization (like "EEE") but omits the degree program (like "B.Tech"), INHERIT the degree program from the recent context unless the new query explicitly overrides it (e.g., "fee for MBA" overrides B.Tech).
+    - Replace the prior entity with the entity in the current query while keeping the inherited degree context where appropriate.
     - Never turn an entity fragment into a generic request to describe the program. For example, after "fee structure", "btech eee" means "What is the fee structure for B.Tech EEE at MRDU?", not "Tell me about B.Tech EEE."
 
-    If there is no prior intent, make a reasonable standalone question without inventing a specific topic. Preserve a complete current question unchanged unless a small clarification is needed. Do not answer; output only the rewritten question."""
+    If there is no prior intent, make a reasonable standalone question without inventing a specific topic. Preserve a complete current question unchanged unless a small clarification is needed (like adding the university name or inherited degree). Do not answer; output only the rewritten question."""
         
         messages = [{"role": "system", "content": sys_prompt}]
         
@@ -206,6 +206,7 @@ CRITICAL INFERENCE RULES:
 5. Recognize standard academic synonyms (e.g., "makeup exams" are equivalent to "supplementary examinations").
 6. If the context states a process is defined elsewhere (e.g., "defined in the academic regulations"), state exactly that instead of saying you couldn't find the information. Do not invent the exact formula if it's missing.
 7. If the context uses ambiguous wording like "as applicable" (e.g., "GATE/merit as applicable"), explain exactly what the source says rather than claiming it as a universal requirement or refusing to answer.
+8. If the user asks for information about a specific specialization (e.g., 'fee for B.Tech EEE') but the context only contains general information for the broader program (e.g., general 'B.Tech fee'), DO NOT say you cannot find the information. Instead, state the general program information (e.g., indicative B.Tech fee) and explicitly clarify that you could not find the specific specialization details.
 
 FORMATTING RULES:
 1. Use standard Markdown syntax (e.g., **text** for bold, - item for lists).
@@ -296,6 +297,7 @@ CRITICAL INFERENCE RULES:
 5. Recognize standard academic synonyms (e.g., "makeup exams" are equivalent to "supplementary examinations").
 6. If the context states a process is defined elsewhere (e.g., "defined in the academic regulations"), state exactly that instead of saying you couldn't find the information. Do not invent the exact formula if it's missing.
 7. If the context uses ambiguous wording like "as applicable" (e.g., "GATE/merit as applicable"), explain exactly what the source says rather than claiming it as a universal requirement or refusing to answer.
+8. If the user asks for information about a specific specialization (e.g., 'fee for B.Tech EEE') but the context only contains general information for the broader program (e.g., general 'B.Tech fee'), DO NOT say you cannot find the information. Instead, state the general program information (e.g., indicative B.Tech fee) and explicitly clarify that you could not find the specific specialization details.
 
 FORMATTING RULES:
 1. Use standard Markdown syntax (e.g., **text** for bold, - item for lists).

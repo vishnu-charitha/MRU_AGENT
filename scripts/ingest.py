@@ -13,7 +13,7 @@ qdrant_key = os.getenv('QDRANT_API_KEY')
 
 print("Connecting to Qdrant...")
 client = QdrantClient(url=qdrant_url, api_key=qdrant_key, timeout=60)
-collection_name = 'mrdu_knowledge_base_v2'
+collection_name = 'mrdu_knowledge_base_v3'
 
 collections = [c.name for c in client.get_collections().collections]
 if collection_name in collections:
@@ -26,8 +26,13 @@ client.create_collection(
     vectors_config=VectorParams(size=384, distance=Distance.COSINE),
 )
 
-
-
+print("Creating payload indices...")
+for field in ['campus', 'program', 'category', 'regulation']:
+    client.create_payload_index(
+        collection_name=collection_name,
+        field_name=field,
+        field_schema="keyword"
+    )
 print("Reading and parsing Markdown...")
 filename = 'MRDU_Chatbot_Knowledge_Base_100pages.md'
 with open(filename, 'r', encoding='utf-8') as f:
@@ -61,12 +66,28 @@ text_splitter = RecursiveCharacterTextSplitter(
 )
 docs = text_splitter.split_documents(md_header_splits)
 
-chunks = []
+# Post-process docs to ensure Markdown table rows are independent
+new_docs = []
 for doc in docs:
-    chunk_content = doc.page_content.strip()
+    lines = doc.page_content.split('\n')
+    current_chunk = []
+    for line in lines:
+        if line.strip().startswith('|') and len(line.split('|')) > 3:
+            if current_chunk:
+                new_docs.append({'page_content': '\n'.join(current_chunk), 'metadata': doc.metadata})
+                current_chunk = []
+            new_docs.append({'page_content': line, 'metadata': doc.metadata})
+        else:
+            current_chunk.append(line)
+    if current_chunk:
+        new_docs.append({'page_content': '\n'.join(current_chunk), 'metadata': doc.metadata})
+
+chunks = []
+for doc in new_docs:
+    chunk_content = doc['page_content'].strip()
     if not chunk_content: continue
 
-    metadata = doc.metadata
+    metadata = doc['metadata']
     h1 = metadata.get("Header 1", "")
     h2 = metadata.get("Header 2", "")
     h3 = metadata.get("Header 3", "")
@@ -77,8 +98,24 @@ for doc in docs:
 
     # Metadata extraction
     lcontent = (title + " " + chunk_content).lower()
-    campus = 'tirupati' if 'tirupati' in lcontent else 'main'
-    program = 'B.Tech' if 'b.tech' in lcontent else ('M.Tech' if 'm.tech' in lcontent else None)
+    
+    if 'tirupati' in lcontent:
+        campus = 'tirupati'
+    elif 'main campus' in lcontent or 'hyderabad' in lcontent or 'maisammaguda' in lcontent:
+        campus = 'main'
+    else:
+        campus = None
+
+    has_btech = 'b.tech' in lcontent or 'btech' in lcontent
+    has_mtech = 'm.tech' in lcontent or 'mtech' in lcontent
+    
+    if has_btech and not has_mtech:
+        program = 'B.Tech'
+    elif has_mtech and not has_btech:
+        program = 'M.Tech'
+    else:
+        program = None
+
     regulation = 'MR24' if 'mr24' in lcontent else ('MR22' if 'mr22' in lcontent else ('MR20' if 'mr20' in lcontent else None))
     category = 'Admissions' if 'admission' in lcontent else ('Examinations' if 'exam' in lcontent else 'General')
 
