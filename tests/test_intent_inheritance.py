@@ -127,3 +127,28 @@ def test_rewriter_receives_latest_user_intent_and_assistant_answer(rag_service):
     assert messages[-3]["content"] == "fee structure"
     assert "\u20b91,15,000" in messages[-2]["content"]
     assert messages[-1]["content"] == "New query: btech eee"
+
+def test_intent_inheritance_long_assistant_history(rag_service):
+    long_answer = "This is a very long answer from the assistant that goes on and on to explain various details about fees and structure. " * 20
+    history = [
+        Message(role="user", content="fee structure"),
+        Message(role="assistant", content=long_answer)
+    ]
+    query = "btech eee"
+    
+    mock_response = MagicMock()
+    mock_response.choices = [
+        MagicMock(message=MagicMock(content="What is the fee structure for B.Tech EEE at MRDU?"))
+    ]
+    rag_service.llm_client.chat.completions.create.return_value = mock_response
+
+    rewritten = rag_service.rewrite_query(query, history)
+    
+    # Assert rewritten works
+    assert "fee structure" in rewritten.lower()
+    
+    # Assert truncation was applied
+    messages = rag_service.llm_client.chat.completions.create.call_args.kwargs["messages"]
+    assistant_msg = messages[-2]["content"]
+    assert len(assistant_msg) == 153 # 150 + "..."
+    assert assistant_msg.endswith("...")

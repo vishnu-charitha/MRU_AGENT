@@ -75,6 +75,11 @@ class RAGService:
             # Need to handle dictionary vs object depending on how it's passed
             role = msg.role if hasattr(msg, 'role') else msg.get('role', 'user')
             content = msg.content if hasattr(msg, 'content') else msg.get('content', '')
+            
+            # Truncate long assistant answers so they don't dilute the query rewriter prompt
+            if role == 'assistant' and len(content) > 150:
+                content = content[:150] + "..."
+                
             messages.append({"role": role, "content": content})
             
         messages.append({"role": "user", "content": f"New query: {query}"})
@@ -374,6 +379,11 @@ RULES:
             
             import re
             import json
+            
+            def normalize(s):
+                if not s: return ""
+                return re.sub(r'\s+', ' ', re.sub(r'[^\w\s]', '', s.lower())).strip()
+
             content = re.sub(r'```json\s*', '', content)
             content = re.sub(r'```', '', content)
             
@@ -387,18 +397,28 @@ RULES:
             for msg in history:
                 role = msg.role if hasattr(msg, 'role') else msg.get('role', 'user')
                 txt = msg.content if hasattr(msg, 'content') else msg.get('content', '')
+                
                 if role == 'user':
-                    history_texts.add(txt.lower().strip())
-            history_texts.add(original_query.lower().strip())
+                    history_texts.add(normalize(txt))
+                
+                # Check for previous assistant followups
+                fqs = msg.followUpQuestions if hasattr(msg, 'followUpQuestions') else msg.get('followUpQuestions')
+                if fqs:
+                    for fq in fqs:
+                        history_texts.add(normalize(fq))
+
+            history_texts.add(normalize(original_query))
             
             filtered = []
             seen = set()
             for q in followups:
                 q_clean = q.strip()
-                q_lower = q_clean.lower()
-                if q_lower not in history_texts and q_lower not in seen:
+                if not q_clean:
+                    continue
+                q_norm = normalize(q_clean)
+                if q_norm not in history_texts and q_norm not in seen:
                     filtered.append(q_clean)
-                    seen.add(q_lower)
+                    seen.add(q_norm)
             
             logger.info(f"Generated followups: {filtered[:2]}")        
             return filtered[:2]

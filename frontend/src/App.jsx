@@ -83,7 +83,11 @@ function App() {
     try {
       const chatHistory = messages
         .filter(m => m.id !== 'welcome' && !m.isError)
-        .map(m => ({ role: m.role, content: m.content }));
+        .map(m => ({ 
+           role: m.role, 
+           content: m.content,
+           followUpQuestions: m.followUpQuestions || undefined
+        }));
 
       console.log("[handleSend] initiating fetch...");
       const response = await fetch(`${API_BASE_URL}/api/chat`, {

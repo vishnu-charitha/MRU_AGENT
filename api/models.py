@@ -4,6 +4,7 @@ from typing import Optional, List
 class Message(BaseModel):
     role: str
     content: str
+    followUpQuestions: Optional[List[str]] = None
 
 class ChatRequest(BaseModel):
     question: str
