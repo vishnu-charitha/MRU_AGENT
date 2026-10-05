@@ -43,7 +43,8 @@ class RAGService:
         self.llm_client = openai.OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=self.openrouter_key,
-            timeout=10.0
+            timeout=60.0,
+            max_retries=2
         ) if self.openrouter_key else None
 
     def rewrite_query(self, query: str, history: list) -> str:
