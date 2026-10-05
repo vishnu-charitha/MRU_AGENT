@@ -12,10 +12,10 @@ logger = logging.getLogger("api")
 app = FastAPI(title="MRDU Knowledge Base RAG API")
 
 import os
-# CORS config
 origins = [
     "http://localhost:3000",
     "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 frontend_url = os.getenv("FRONTEND_URL")
 if frontend_url:

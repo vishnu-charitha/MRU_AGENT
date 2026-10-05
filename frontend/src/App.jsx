@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Minus, Maximize2, X, GraduationCap, Building2, Wallet, MapPin, Calendar, Briefcase, Paperclip, Phone, Share2, Search, ArrowRight, Menu, ExternalLink, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
 const formatMessageContent = (text) => {
   if (!text) return null;
@@ -58,6 +57,7 @@ function App() {
   const [messages, setMessages] = useState([initialWelcome]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -68,26 +68,45 @@ function App() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isLoading]);
+  }, [messages, isLoading, isStreaming]);
 
   const handleSend = async (question) => {
-    if (!question.trim() || isLoading) return;
+    console.log(`[handleSend] start. question: "${question}", isLoading: ${isLoading}, isStreaming: ${isStreaming}`);
+    if (!question.trim() || isLoading || isStreaming) return;
     
     const userMsg = { id: Date.now().toString(), role: 'user', content: question };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
+    console.log("[handleSend] setting isLoading = true");
     setIsLoading(true);
 
     try {
+      const chatHistory = messages
+        .filter(m => m.id !== 'welcome' && !m.isError)
+        .map(m => ({ role: m.role, content: m.content }));
+
+      console.log("[handleSend] initiating fetch...");
       const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question })
+        body: JSON.stringify({ question, history: chatHistory })
       });
       
-      if (!response.ok) throw new Error('Network response was not ok');
+      console.log("[handleSend] fetch response status:", response.status);
+      if (!response.ok) {
+        let errorMsg = 'Unable to connect to MRDU Assistant. Please try again later.';
+        try {
+            const errorData = await response.json();
+            if (errorData.detail) errorMsg = errorData.detail;
+        } catch (e) {
+            // keep default error message
+        }
+        throw new Error(errorMsg);
+      }
       
+      console.log("[handleSend] setting isLoading = false, isStreaming = true");
       setIsLoading(false); // Remove typing indicator once stream starts
+      setIsStreaming(true);
       
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
@@ -103,6 +122,7 @@ function App() {
       let accumulatedContent = '';
       let buffer = '';
 
+      console.log("[handleSend] starting streaming loop");
       while (!done) {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
@@ -120,6 +140,11 @@ function App() {
               
               let updatedSources = null;
               let clearSources = false;
+              let followupQuestions = null;
+              
+              if (data.type === "followup_questions") {
+                followupQuestions = data.questions;
+              }
               
               if (data.sources) {
                 updatedSources = data.sources;
@@ -127,6 +152,7 @@ function App() {
               
               if (data.error || data.detail) {
                 accumulatedContent = data.error || data.detail;
+                clearSources = true;
               } else if (data.answer) {
                 accumulatedContent = data.answer;
               } else if (data.answer_chunk) {
@@ -144,9 +170,13 @@ function App() {
                 if (updatedSources) {
                   lastMsg.sources = updatedSources;
                 }
+                if (followupQuestions) {
+                  lastMsg.followUpQuestions = followupQuestions;
+                }
                 lastMsg.content = accumulatedContent;
                 if (clearSources) {
                   lastMsg.sources = [];
+                  lastMsg.followUpQuestions = [];
                 }
                 
                 newMessages[newMessages.length - 1] = lastMsg;
@@ -158,18 +188,25 @@ function App() {
           }
         }
       }
+      console.log("[handleSend] streaming loop finished. done =", done);
     } catch (error) {
+      console.error("[handleSend] caught error:", error);
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Unable to connect to MRDU Assistant. Please make sure the backend server is running.',
+        content: error.message || 'Unable to connect to MRDU Assistant. Please make sure the backend server is running.',
         isError: true
       }]);
       setIsLoading(false);
+      setIsStreaming(false);
     } finally {
+      console.log("[handleSend] finally block executing. Setting isStreaming = false.");
+      setIsStreaming(false);
       // Give focus back to input on desktop
       if (window.innerWidth > 1024) {
-        inputRef.current?.focus();
+        setTimeout(() => {
+          inputRef.current?.focus();
+        }, 100); // Small delay to let React update DOM before focusing
       }
     }
   };
@@ -351,6 +388,24 @@ function App() {
                         </div>
                       </div>
                     )}
+                    
+                    {msg.followUpQuestions && msg.followUpQuestions.length > 0 && (
+                      <div className="followups-container">
+                        <div className="followups-title">Suggested questions</div>
+                        <div className="followups-list">
+                          {msg.followUpQuestions.map((fq, idx) => (
+                            <button 
+                              key={idx} 
+                              className="followup-chip"
+                              onClick={() => handleSend(fq)}
+                              disabled={isLoading || isStreaming}
+                            >
+                              {fq}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {msg.isError && (
                       <button className="retry-btn" onClick={() => handleSend(messages[messages.length-2].content)}>
@@ -401,14 +456,14 @@ function App() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend(input)}
-                disabled={isLoading}
+                disabled={isLoading || isStreaming}
                 aria-label="Chat input"
               />
               <Paperclip size={18} style={{ color: 'rgba(255,255,255,0.4)', margin: '0 10px', cursor: 'pointer' }} aria-label="Attach file" />
               <button 
                 className="send-btn" 
                 onClick={() => handleSend(input)} 
-                disabled={isLoading || !input.trim()}
+                disabled={isLoading || isStreaming || !input.trim()}
                 aria-label="Send message"
               >
                 <Send size={16} />

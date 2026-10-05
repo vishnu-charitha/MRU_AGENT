@@ -17,8 +17,15 @@ async def chat_endpoint(request: ChatRequest):
         raise HTTPException(status_code=503, detail="RAG service is currently unavailable.")
 
     try:
+        safe_history = str(request.history).encode('ascii', 'replace').decode('ascii')
+        logger.info(f"DEBUG BACKEND: Received question: {request.question}")
+        logger.info(f"DEBUG BACKEND: Received history: {safe_history}")
+        
+        standalone_query = rag_service.rewrite_query(request.question, request.history)
+        logger.info(f"DEBUG BACKEND: Standalone query generated: {standalone_query}")
+        
         hits = rag_service.retrieve(
-            query=request.question,
+            query=standalone_query,
             campus=request.campus,
             category=request.category,
             program=request.program,

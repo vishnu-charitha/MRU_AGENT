@@ -42,20 +42,75 @@ class RAGService:
         logger.info("Initializing OpenAI client for OpenRouter...")
         self.llm_client = openai.OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key=self.openrouter_key
+            api_key=self.openrouter_key,
+            timeout=10.0
         ) if self.openrouter_key else None
+
+    def rewrite_query(self, query: str, history: list) -> str:
+        if not history or not self.llm_client:
+            return query
+            
+        if len(history) < 2:
+            return query
+            
+        sys_prompt = """You are a highly intelligent query rewriter for a university chatbot.
+Given the conversation history and a new user query, rewrite the new query into a standalone question.
+
+CRITICAL RULES:
+1. Identify the PREVIOUS INTENT (e.g., fee structure, eligibility, career opportunities) from the history.
+2. If the new query is a short fragment or entity (e.g., "btech eee", "cse", "mtech"), you MUST inherit the previous intent and apply it to the new entity.
+   Example: History="fee structure", Query="btech eee" -> Rewritten="What is the fee structure for B.Tech EEE at MRDU?"
+3. If the new query explicitly introduces a new intent (e.g., "What is the eligibility for B.Tech EEE?"), use the new intent and ignore the previous one.
+4. If the new query is already standalone, return it as is.
+5. Do NOT answer the question. Only output the rewritten question without any conversational filler."""
+        
+        messages = [{"role": "system", "content": sys_prompt}]
+        
+        # Limit context to last 4 messages to avoid distraction
+        recent_history = history[-4:] if len(history) > 4 else history
+        for msg in recent_history:
+            # Need to handle dictionary vs object depending on how it's passed
+            role = msg.role if hasattr(msg, 'role') else msg.get('role', 'user')
+            content = msg.content if hasattr(msg, 'content') else msg.get('content', '')
+            messages.append({"role": role, "content": content})
+            
+        messages.append({"role": "user", "content": f"New query: {query}"})
+        
+        try:
+            resp = self.llm_client.chat.completions.create(
+                model=self.openrouter_model,
+                messages=messages,
+                temperature=0.0,
+                max_tokens=60
+            )
+            rewritten = resp.choices[0].message.content.strip(' "')
+            if rewritten.lower().startswith("rewritten query:"):
+                rewritten = rewritten.split(":", 1)[1].strip(' "')
+            return rewritten if rewritten else query
+        except Exception as e:
+            logger.warning(f"Query rewriting failed: {e}")
+            return query
+
 
     def retrieve(self, query: str, campus=None, category=None, program=None, regulation=None, limit=5):
         if not hasattr(self, 'qdrant_client'):
             logger.warning("Qdrant client not initialized. Cannot retrieve context.")
             return []
 
+        import re
         # Basic Query Expansion
         expanded_query = query.lower()
+
         if any(w in expanded_query for w in ['programme', 'programmes', 'course', 'courses']):
             expanded_query += " programmes courses programme portfolio sanctioned intake undergraduate postgraduate"
         elif any(w in expanded_query for w in ['contact', 'email', 'phone', 'address']):
             expanded_query += " contact details phone email address admissions official"
+            
+        # Targeted Alias Expansion for MRDU terminology
+        if re.search(r'\bmakeup exam(s)?\b', expanded_query):
+            expanded_query += " supplementary examinations backlogs"
+        if re.search(r'\bcgpa\b|\bgpa\b', expanded_query):
+            expanded_query += " sgpa cgpa computation academic regulations grade points"
 
         vec = self.model.encode(expanded_query, normalize_embeddings=True).tolist()
         must_conditions = []
@@ -66,18 +121,19 @@ class RAGService:
 
         query_filter = Filter(must=must_conditions) if must_conditions else None
 
+        pre_rerank_limit = max(25, limit * 5)
         hits = self.qdrant_client.query_points(
             collection_name=self.qdrant_collection,
             query=vec,
             query_filter=query_filter,
-            limit=limit * 3  # Fetch more for reranking
+            limit=pre_rerank_limit
         ).points
 
         if not hits or not self.reranker:
             return hits[:limit]
 
-        # Rerank
-        pairs = [[query, h.payload.get('content', '')] for h in hits]
+        # Rerank using the expanded query so aliases are evaluated correctly
+        pairs = [[expanded_query, h.payload.get('content', '')] for h in hits]
         scores = self.reranker.predict(pairs)
 
         # Assign cross-encoder scores and sort
@@ -100,7 +156,7 @@ class RAGService:
             }
 
         # 2. Quality Threshold Guard
-        if not hits or hits[0].score < 0.40:
+        if not hits or hits[0].score < -15.0:
             return {
                 "answer": "I couldn't find enough information in the MRDU knowledge base to answer that accurately.",
                 "sources": []
@@ -129,7 +185,8 @@ class RAGService:
         system_prompt = f"""
 You are an expert academic assistant for MRDU (Malla Reddy Deemed to be University).
 Answer the user's specific question directly using ONLY the provided context.
-If the context does not contain the answer, explicitly state: "I couldn't find enough information in the MRDU knowledge base to answer that accurately."
+You must use the provided context to answer the question, even if the context uses synonyms (e.g. "supplementary" for "makeup") or ambiguous wording (e.g. "as applicable").
+If the provided context is completely irrelevant and does not contain the answer or a directly equivalent concept, explicitly state: "I couldn't find enough information in the MRDU knowledge base to answer that accurately."
 Keep answers concise while retaining necessary qualifications. Focus exclusively on B.Tech and M.Tech programs.
 
 CRITICAL INFERENCE RULES:
@@ -137,6 +194,9 @@ CRITICAL INFERENCE RULES:
 2. Do not introduce facts from conversational history that are absent from the retrieved context.
 3. For conflicting intake figures such as 720 and 960, explain the discrepancy only when relevant and supported; do not arbitrarily choose a figure.
 4. Never infer or explain discrepancies unless the provided knowledge-base context explicitly explains them.
+5. Recognize standard academic synonyms (e.g., "makeup exams" are equivalent to "supplementary examinations").
+6. If the context states a process is defined elsewhere (e.g., "defined in the academic regulations"), state exactly that instead of saying you couldn't find the information. Do not invent the exact formula if it's missing.
+7. If the context uses ambiguous wording like "as applicable" (e.g., "GATE/merit as applicable"), explain exactly what the source says rather than claiming it as a universal requirement or refusing to answer.
 
 FORMATTING RULES:
 1. Use standard Markdown syntax (e.g., **text** for bold, - item for lists).
@@ -155,16 +215,21 @@ Context:
 
         if self.llm_client:
             logger.info(f"Calling OpenRouter model {self.openrouter_model}...")
-            resp = self.llm_client.chat.completions.create(
-                model=self.openrouter_model,
-                messages=messages,
-                temperature=0.0
-            )
-            llm_answer = resp.choices[0].message.content
+            try:
+                resp = self.llm_client.chat.completions.create(
+                    model=self.openrouter_model,
+                    messages=messages,
+                    temperature=0.0
+                )
+                llm_answer = resp.choices[0].message.content
+            except Exception as e:
+                logger.error(f"OpenRouter LLM error: {e}")
+                llm_answer = "The AI service is currently unavailable. Please try again in a few moments."
+                sources = []
         else:
             llm_answer = "API key missing. Unable to generate answer."
 
-        if llm_answer.strip().startswith("I couldn't find enough information"):
+        if llm_answer.strip().startswith("I couldn't find enough information in the MRDU knowledge base"):
             sources = []
 
         return {
@@ -184,7 +249,7 @@ Context:
             return
 
         # 2. Quality Threshold Guard
-        if not hits or hits[0].score < 0.40:
+        if not hits or hits[0].score < -15.0:
             yield json.dumps({"answer": "I couldn't find enough information in the MRDU knowledge base to answer that accurately.", "sources": []}) + "\n"
             return
 
@@ -219,6 +284,9 @@ CRITICAL INFERENCE RULES:
 2. Do not introduce facts from conversational history that are absent from the retrieved context.
 3. For conflicting intake figures such as 720 and 960, explain the discrepancy only when relevant and supported; do not arbitrarily choose a figure.
 4. Never infer or explain discrepancies unless the provided knowledge-base context explicitly explains them.
+5. Recognize standard academic synonyms (e.g., "makeup exams" are equivalent to "supplementary examinations").
+6. If the context states a process is defined elsewhere (e.g., "defined in the academic regulations"), state exactly that instead of saying you couldn't find the information. Do not invent the exact formula if it's missing.
+7. If the context uses ambiguous wording like "as applicable" (e.g., "GATE/merit as applicable"), explain exactly what the source says rather than claiming it as a universal requirement or refusing to answer.
 
 FORMATTING RULES:
 1. Use standard Markdown syntax (e.g., **text** for bold, - item for lists).
@@ -239,25 +307,101 @@ Context:
 
         if self.llm_client:
             logger.info(f"Calling OpenRouter model {self.openrouter_model} with stream=True...")
+            try:
+                resp = self.llm_client.chat.completions.create(
+                    model=self.openrouter_model,
+                    messages=messages,
+                    temperature=0.1,
+                    max_tokens=1000,
+                    extra_body={"repetition_penalty": 1.1},
+                    stream=True
+                )
+                full_answer = ""
+                for chunk in resp:
+                    if chunk.choices[0].delta.content:
+                        content_piece = chunk.choices[0].delta.content
+                        full_answer += content_piece
+                        yield json.dumps({"answer_chunk": content_piece}) + "\n"
+    
+                if full_answer.strip().startswith("I couldn't find enough information in the MRDU knowledge base") or full_answer.strip().startswith("This topic is out of scope"):
+                    yield json.dumps({"clear_sources": True}) + "\n"
+                else:
+                    followups = self.generate_followup_questions(query, full_answer, history)
+                    if followups:
+                        yield json.dumps({"type": "followup_questions", "questions": followups}) + "\n"
+            except Exception as e:
+                logger.error(f"OpenRouter LLM streaming error: {e}")
+                yield json.dumps({"error": "The AI service is currently unavailable. Please try again in a few moments."}) + "\n"
+        else:
+            yield json.dumps({"error": "API key missing. Unable to generate answer."}) + "\n"
+
+    def generate_followup_questions(self, original_query: str, full_answer: str, history: list) -> list[str]:
+        if not self.llm_client:
+            return []
+        
+        system_prompt = """
+You are an expert academic assistant for MRDU. Based on the user's last question and your answer, generate exactly 1-2 concise, context-aware follow-up questions that the user might want to ask next.
+RULES:
+1. Generate 1-2 short questions maximum.
+2. Questions must be directly related to the current answer and MRDU's B.Tech/M.Tech programs.
+3. Do not generate generic questions like "Would you like to know more?" or "Can I help with anything else?".
+4. Do not invent facts or suggest unsupported questions.
+5. Return ONLY a JSON object in this format: {"followups": ["Question 1", "Question 2"]}
+6. If there is no meaningful follow-up, return {"followups": []}
+"""
+        messages = [{"role": "system", "content": system_prompt.strip()}]
+        
+        for msg in history[-2:]:
+            role = msg.role if hasattr(msg, 'role') else msg.get('role', 'user')
+            content = msg.content if hasattr(msg, 'content') else msg.get('content', '')
+            messages.append({"role": role, "content": content})
+            
+        messages.append({"role": "user", "content": original_query})
+        messages.append({"role": "assistant", "content": full_answer})
+        
+        try:
             resp = self.llm_client.chat.completions.create(
                 model=self.openrouter_model,
                 messages=messages,
-                temperature=0.1,
-                extra_body={"repetition_penalty": 1.1},
-                stream=True
+                temperature=0.3,
+                max_tokens=150,
+                response_format={"type": "json_object"}
             )
-            full_answer = ""
-            for chunk in resp:
-                if chunk.choices[0].delta.content:
-                    content_piece = chunk.choices[0].delta.content
-                    full_answer += content_piece
-                    yield json.dumps({"answer_chunk": content_piece}) + "\n"
-
-            if full_answer.strip().startswith("I couldn't find enough information"):
-                yield json.dumps({"clear_sources": True}) + "\n"
-
-        else:
-            yield json.dumps({"answer": "API key missing. Unable to generate answer."}) + "\n"
+            content = resp.choices[0].message.content
+            
+            import re
+            import json
+            content = re.sub(r'```json\s*', '', content)
+            content = re.sub(r'```', '', content)
+            
+            parsed = json.loads(content)
+            followups = parsed.get("followups", [])
+            if not isinstance(followups, list):
+                logger.error(f"LLM returned non-list followups: {followups}")
+                return []
+            
+            history_texts = set()
+            for msg in history:
+                role = msg.role if hasattr(msg, 'role') else msg.get('role', 'user')
+                txt = msg.content if hasattr(msg, 'content') else msg.get('content', '')
+                if role == 'user':
+                    history_texts.add(txt.lower().strip())
+            history_texts.add(original_query.lower().strip())
+            
+            filtered = []
+            seen = set()
+            for q in followups:
+                q_clean = q.strip()
+                q_lower = q_clean.lower()
+                if q_lower not in history_texts and q_lower not in seen:
+                    filtered.append(q_clean)
+                    seen.add(q_lower)
+            
+            logger.info(f"Generated followups: {filtered[:2]}")        
+            return filtered[:2]
+        except Exception as e:
+            logger.error(f"Error generating follow-ups: {e}")
+            return []
 
 # Global singleton
 rag_service = None
