@@ -53,20 +53,23 @@ class RAGService:
         if len(history) < 2:
             return query
             
-        sys_prompt = """You are a highly intelligent query rewriter for a university chatbot.
-Given the conversation history and a new user query, rewrite the new query into a standalone question.
+        sys_prompt = """You rewrite university-chatbot queries into standalone retrieval questions.
 
-CRITICAL RULES:
-1. Identify the PREVIOUS INTENT (e.g., fee structure, eligibility, career opportunities) from the history.
-2. If the new query is a short fragment or entity (e.g., "btech eee", "cse", "mtech"), you MUST inherit the previous intent and apply it to the new entity.
-   Example: History="fee structure", Query="btech eee" -> Rewritten="What is the fee structure for B.Tech EEE at MRDU?"
-3. If the new query explicitly introduces a new intent (e.g., "What is the eligibility for B.Tech EEE?"), use the new intent and ignore the previous one.
-4. If the new query is already standalone, return it as is.
-5. Do NOT answer the question. Only output the rewritten question without any conversational filler."""
+    Decide whether the CURRENT QUERY expresses an intent or is a follow-up fragment:
+    - A complete question or topic phrase that names an information need expresses its own intent (for example, "How many seats are there in B.Tech EEE?", "fees for EEE", "eligibility for EEE", or "documents required"). Keep that intent, even if it differs from history.
+    - A short entity/noun-phrase fragment without a requested information type (for example, "btech eee", "cse", "mtech", or "hostel") is a follow-up. Inherit the intent from the MOST RECENT preceding user question that clearly expressed one.
+
+    For follow-ups:
+    - The latest clear user intent takes precedence over every older topic. Do not let unrelated older turns override it.
+    - Use the assistant answer from that same turn only to clarify the topic/entity; it is supporting context, not a new intent.
+    - Replace the prior entity with the entity in the current query. If the current query only gives a specialization (such as "cse"), retain the degree/program from the relevant recent context.
+    - Never turn an entity fragment into a generic request to describe the program. For example, after "fee structure", "btech eee" means "What is the fee structure for B.Tech EEE at MRDU?", not "Tell me about B.Tech EEE."
+
+    If there is no prior intent, make a reasonable standalone question without inventing a specific topic. Preserve a complete current question unchanged unless a small clarification is needed. Do not answer; output only the rewritten question."""
         
         messages = [{"role": "system", "content": sys_prompt}]
         
-        # Limit context to last 4 messages to avoid distraction
+        # Keep only recent turns; the system prompt gives the latest clear user intent priority.
         recent_history = history[-4:] if len(history) > 4 else history
         for msg in recent_history:
             # Need to handle dictionary vs object depending on how it's passed
