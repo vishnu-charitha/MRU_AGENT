@@ -39,11 +39,12 @@ class RAGService:
         if not self.openrouter_key:
             logger.warning("OpenRouter configuration is missing.")
 
+        import httpx
         logger.info("Initializing OpenAI client for OpenRouter...")
         self.llm_client = openai.OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=self.openrouter_key,
-            timeout=60.0,
+            timeout=httpx.Timeout(connect=15.0, read=120.0, write=15.0, pool=15.0),
             max_retries=2
         ) if self.openrouter_key else None
 
@@ -255,12 +256,12 @@ Context:
         # 1. Scope Guard (preserved)
         query_lower = query.lower()
         if any(kw in query_lower for kw in ['mba', 'bba', 'bca', 'mca', 'unrelated university']):
-            yield json.dumps({"answer": "This topic is out of scope. I can only provide information about MRDU's B.Tech and M.Tech programs.", "sources": []}) + "\n"
+            yield json.dumps({"out_of_scope": True, "clear_sources": True, "answer_chunk": "This topic is out of scope. I can only provide information about MRDU's B.Tech and M.Tech programs."}) + "\n"
             return
 
         # 2. Quality Threshold Guard
         if not hits or hits[0].score < -15.0:
-            yield json.dumps({"answer": "I couldn't find enough information in the MRDU knowledge base to answer that accurately.", "sources": []}) + "\n"
+            yield json.dumps({"clear_sources": True, "answer_chunk": "I couldn't find enough information in the MRDU knowledge base to answer that accurately."}) + "\n"
             return
 
         # 3. Grounded Context
