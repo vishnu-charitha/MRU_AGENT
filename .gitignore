@@ -35,3 +35,5 @@ batch_search_output.txt
 verify_dump.json
 evaluation/datasets/mrdu_eval_backup*.jsonl
 evaluation/results/
+
+.venv/
