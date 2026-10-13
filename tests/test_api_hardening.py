@@ -3,9 +3,9 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 from api.main import app
 import json
-from api.services.rag_service import get_rag_service
+from api.services.rag_service import RAGService
 
-client = TestClient(app)
+# client fixture comes from conftest.py
 
 class MockHit:
     def __init__(self, score, title="Mock", content="Mock content", url="Mock URL", campus="main"):
@@ -24,7 +24,7 @@ def mock_rag_service():
         mock_get.return_value = mock_service
         yield mock_service
 
-def test_successful_chat_response(mock_rag_service):
+def test_successful_chat_response(client, mock_rag_service):
     # Setup mock
     mock_rag_service.retrieve.return_value = [MockHit(1.0)]
     
@@ -44,7 +44,7 @@ def test_successful_chat_response(mock_rag_service):
     assert json.loads(chunks[1])["answer_chunk"] == "This "
     assert json.loads(chunks[2])["answer_chunk"] == "is a test."
 
-def test_unsupported_question(mock_rag_service):
+def test_unsupported_question(client, mock_rag_service):
     mock_rag_service.retrieve.return_value = [MockHit(-20.0)]
     
     def mock_stream(query, hits, history):
@@ -58,19 +58,19 @@ def test_unsupported_question(mock_rag_service):
     assert "I couldn't find enough information" in chunk["answer"]
     assert chunk["sources"] == []
 
-def test_malformed_request():
+def test_malformed_request(client):
     # Sending missing required field
     response = client.post("/api/chat", json={})
     assert response.status_code == 422 # FastAPI validation error
 
-def test_retrieval_failure(mock_rag_service):
+def test_retrieval_failure(client, mock_rag_service):
     mock_rag_service.retrieve.side_effect = Exception("Qdrant connection refused")
     
     response = client.post("/api/chat", json={"question": "What is B.Tech?"})
     assert response.status_code == 500
     assert response.json()["detail"] == "An error occurred while generating the response."
 
-def test_llm_timeout_streaming_failure(mock_rag_service):
+def test_llm_timeout_streaming_failure(client, mock_rag_service):
     mock_rag_service.retrieve.return_value = [MockHit(1.0)]
     
     def mock_stream(query, hits, history):
@@ -89,14 +89,14 @@ def test_llm_timeout_streaming_failure(mock_rag_service):
     assert "error" in json.loads(chunks[1])
     assert "unavailable" in json.loads(chunks[1])["error"]
 
-def test_service_initialization_failure():
+def test_service_initialization_failure(client):
     with patch("api.routes.chat.get_rag_service") as mock_get:
         mock_get.side_effect = Exception("Failed to load SentenceTransformer")
         response = client.post("/api/chat", json={"question": "Test"})
         assert response.status_code == 503
         assert response.json()["detail"] == "RAG service is currently unavailable."
 
-def test_inference_guardrail_exact_rejection(mock_rag_service):
+def test_inference_guardrail_exact_rejection(client, mock_rag_service):
     # Weak retrieval but clears the -15.0 threshold (e.g. -10.0)
     mock_rag_service.retrieve.return_value = [MockHit(-10.0)]
     
@@ -114,19 +114,32 @@ def test_inference_guardrail_exact_rejection(mock_rag_service):
     assert json.loads(chunks[-1]).get("clear_sources") is True
 
 def test_inference_guardrail_false_positive():
-    rag = get_rag_service()
+    # Safely isolated RAGService instance avoiding real ML model/network initialization
+    rag = RAGService.__new__(RAGService)
+    rag.openrouter_model = "test-model"
     hits = [MockHit(5.0)]
     
-    # We will test the actual generate_answer_stream output
-    with patch.object(rag, "llm_client") as mock_llm:
-        mock_response = MagicMock()
-        mock_chunk = MagicMock()
-        mock_chunk.choices = [MagicMock()]
-        mock_chunk.choices[0].delta.content = "I couldn't find enough information about M.Tech, but B.Tech is 100k."
-        mock_response.__iter__.return_value = [mock_chunk]
-        mock_llm.chat.completions.create.return_value = mock_response
-        
-        chunks = list(rag.generate_answer_stream("Fees?", hits))
-        # Ensure we don't clear sources
-        assert not any("clear_sources" in chunk for chunk in chunks if chunk)
+    mock_llm = MagicMock()
+    mock_response = MagicMock()
+    mock_chunk = MagicMock()
+    mock_chunk.choices = [MagicMock()]
+    mock_chunk.choices[0].delta.content = "I couldn't find enough information about M.Tech, but B.Tech is 100k."
+    mock_response.__iter__.return_value = [mock_chunk]
+    mock_response.choices[0].message.content = json.dumps({"followups": []})
+    mock_llm.chat.completions.create.return_value = mock_response
+    rag.llm_client = mock_llm
+    chunks = list(rag.generate_answer_stream("Fees?", hits))
+    events = [json.loads(chunk) for chunk in chunks if chunk]
+
+    # Confirm that actual source data was returned.
+    assert any(
+        isinstance(event.get("sources"), list) and event["sources"]
+        for event in events
+    )
+
+    # Confirm that valid sources were not cleared.
+    assert not any(
+        event.get("clear_sources") is True
+        for event in events
+    )
 

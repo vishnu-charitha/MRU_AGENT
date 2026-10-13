@@ -3,11 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 from dotenv import load_dotenv
 load_dotenv()
-from .routes import chat
+from .routes import chat, students
 from .services.rag_service import get_rag_service
+from .database import init_db
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api")
+
+# Initialize database schema
+init_db()
 
 app = FastAPI(title="MRDU Knowledge Base RAG API")
 
@@ -29,6 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(students.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 
 @app.get("/health")

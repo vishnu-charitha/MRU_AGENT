@@ -37,3 +37,9 @@ evaluation/datasets/mrdu_eval_backup*.jsonl
 evaluation/results/
 
 .venv/
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+!evaluation/results/student_registration_implementation_report.md

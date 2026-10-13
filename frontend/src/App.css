@@ -275,7 +275,8 @@ header {
   width: 100%;
   max-width: 470px;
   min-width: 0;
-  height: min(690px, 82vh);
+  height: min(690px, 85vh);
+  max-height: calc(100vh - 120px);
   min-height: 480px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.35);
@@ -286,6 +287,7 @@ header {
 }
 
 .chatbot-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -365,10 +367,13 @@ header {
 .chat-body {
   display: flex;
   flex: 1;
+  min-height: 0;
   flex-direction: column;
   gap: 12px;
   padding: 16px;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
   background: #f6f8fc;
 }
 
@@ -555,6 +560,7 @@ header {
 }
 
 .chat-input-area {
+  flex-shrink: 0;
   padding: 13px;
   border-top: 1px solid #e1e6ee;
   background: #fff;
@@ -692,8 +698,9 @@ header {
     flex: auto;
     width: 100%;
     max-width: 600px;
-    height: 620px;
-    min-height: 480px;
+    height: min(620px, 85vh);
+    max-height: calc(100vh - 100px);
+    min-height: 400px;
     align-self: center;
   }
 }
@@ -782,8 +789,9 @@ header {
   }
 
   .chatbot-panel {
-    height: 600px;
-    min-height: 480px;
+    height: min(600px, 85vh);
+    max-height: calc(100vh - 80px);
+    min-height: 380px;
     border-radius: 12px;
   }
 
@@ -840,3 +848,314 @@ header {
     padding: 9px;
   }
 }
+
+/* ==========================================================================
+   Mandatory Student Registration Inline Styles (Contained in .chatbot-panel)
+   ========================================================================== */
+.chatbot-registration-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex-shrink: 0;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e5e7eb;
+  margin-bottom: 24px;
+  animation: inlineFadeIn 0.3s ease-out forwards;
+}
+
+@keyframes inlineFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.registration-header-inline {
+  background: linear-gradient(135deg, #d32f2f 0%, #ff5722 55%, #ff7043 100%);
+  color: #ffffff;
+  padding: 16px 18px 14px 18px;
+  text-align: left;
+}
+
+.reg-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.reg-brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.22);
+  padding: 3px 8px;
+  border-radius: 16px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.registration-header-inline h2 {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 2px;
+  color: #ffffff;
+  letter-spacing: -0.3px;
+}
+
+.registration-header-inline .reg-subtitle {
+  font-size: 12px;
+  opacity: 0.95;
+  line-height: 1.35;
+  color: #fff4ed;
+}
+
+.registration-body-inline {
+  padding: 16px 16px 28px 16px;
+  background: #ffffff;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.admission-guide-banner {
+  background: #fbfbfd;
+  border: 1px solid #fed7aa;
+  border-left: 4px solid #f97316;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+}
+
+.admission-guide-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #9a3412;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admission-guide-desc {
+  font-size: 12px;
+  color: #4b5563;
+  line-height: 1.45;
+}
+
+.registration-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.required-star {
+  color: #dc2626;
+}
+
+.input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon-prefix {
+  position: absolute;
+  left: 12px;
+  color: #6b7280;
+  pointer-events: none;
+}
+
+.registration-form input[type="text"],
+.registration-form input[type="email"],
+.registration-form input[type="tel"],
+.registration-form select {
+  width: 100%;
+  padding: 10px 12px 10px 38px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #111827;
+  background-color: #ffffff;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.registration-form input:focus,
+.registration-form select:focus {
+  outline: none;
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+}
+
+.mobile-input-wrapper {
+  display: flex;
+  width: 100%;
+}
+
+.country-code-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 12px;
+  background: #f3f4f6;
+  border: 1.5px solid #d1d5db;
+  border-right: none;
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+  user-select: none;
+}
+
+.mobile-input-wrapper input {
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  padding-left: 12px !important;
+}
+
+.consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.consent-row input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  margin-top: 2px;
+  cursor: pointer;
+  accent-color: #f97316;
+}
+
+.consent-text {
+  font-size: 11px;
+  color: #4b5563;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.reg-error-box {
+  padding: 10px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.reg-success-box {
+  padding: 10px 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  color: #166534;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.continue-chat-btn {
+  margin-top: 6px;
+  width: 100%;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #d32f2f 0%, #f97316 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.25);
+  transition: all 0.2s ease;
+}
+
+.continue-chat-btn:hover:not(:disabled) {
+  opacity: 0.95;
+  box-shadow: 0 6px 16px rgba(249, 115, 22, 0.35);
+  transform: translateY(-1px);
+}
+
+.continue-chat-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.reg-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.privacy-notice {
+  font-size: 10px;
+  color: #6b7280;
+  text-align: center;
+  margin-top: 8px;
+  line-height: 1.35;
+}
+
+@media (max-width: 480px) {
+  .chatbot-registration-container {
+    border-radius: 8px;
+  }
+  .registration-header-inline {
+    padding: 14px 12px 12px 12px;
+  }
+  .registration-header-inline h2 {
+    font-size: 18px;
+  }
+  .registration-body-inline {
+    padding: 12px;
+  }
+}

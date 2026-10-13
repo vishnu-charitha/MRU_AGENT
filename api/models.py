@@ -23,3 +23,23 @@ class SourceModel(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     sources: List[SourceModel]
+
+
+class StudentRegisterRequest(BaseModel):
+    full_name: str = Field(..., min_length=1, max_length=100)
+    email: str = Field(..., min_length=1, max_length=255)
+    mobile_number: str = Field(..., min_length=1, max_length=30)
+    interested_course: str = Field(..., max_length=50)
+    consent: bool = Field(...)
+
+
+class StudentRegisterResponse(BaseModel):
+    success: bool
+    student_id: str
+    token: str
+    message: str
+
+
+class SessionValidateResponse(BaseModel):
+    valid: bool
+    student_id: str
