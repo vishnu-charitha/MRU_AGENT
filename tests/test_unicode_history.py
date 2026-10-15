@@ -2,9 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from api.main import app
 
-client = TestClient(app)
-
-def test_chat_unicode_history_btech_eee():
+def test_chat_unicode_history_btech_eee(client):
     payload = {
         "question": "for btech eee",
         "history": [
@@ -21,7 +19,7 @@ def test_chat_unicode_history_btech_eee():
     response = client.post("/api/chat", json=payload)
     assert response.status_code == 200, f"Expected 200 OK, got {response.status_code}: {response.text}"
 
-def test_chat_unicode_history_btech_cse():
+def test_chat_unicode_history_btech_cse(client):
     payload = {
         "question": "for btech computer science and engineering",
         "history": [

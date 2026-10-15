@@ -5,8 +5,10 @@ from api.models import Message
 
 @pytest.fixture
 def rag_service():
-    service = RAGService()
+    # Avoid loading the real ML models during unit tests.
+    service = RAGService.__new__(RAGService)
     service.llm_client = MagicMock()
+    service.openrouter_model = "test-model"
     return service
 
 def test_intent_inheritance_fee_structure(rag_service):

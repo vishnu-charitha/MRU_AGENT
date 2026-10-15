@@ -5,3 +5,5 @@ sentence-transformers
 openai
 python-dotenv
 requests
+sqlalchemy>=2.0
+pyjwt>=2.8.0

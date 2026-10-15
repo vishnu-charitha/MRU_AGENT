@@ -18,6 +18,10 @@ import {
   Menu,
   ExternalLink,
   RefreshCw,
+  User,
+  Mail,
+  ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import './App.css';
@@ -90,9 +94,159 @@ function App() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // Student registration states
+  const [sessionToken, setSessionToken] = useState(() => {
+    return sessionStorage.getItem('mrdu_student_token') || null;
+  });
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+
+  // Registration form inputs & status
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [mobileNumber, setMobileNumber] = useState('');
+  const [interestedCourse, setInterestedCourse] = useState('B.Tech');
+  const [consent, setConsent] = useState(false);
+  const [regError, setRegError] = useState('');
+  const [regSuccess, setRegSuccess] = useState('');
+  const [isSubmittingReg, setIsSubmittingReg] = useState(false);
+
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const requestInProgressRef = useRef(false);
+
+  // Validate stored session on page load / refresh
+  useEffect(() => {
+    const validateExistingSession = async () => {
+      const storedToken = sessionStorage.getItem('mrdu_student_token');
+      if (!storedToken) {
+        setIsRegistered(false);
+        setSessionToken(null);
+        setIsCheckingSession(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/students/session`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${storedToken}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.valid) {
+            setSessionToken(storedToken);
+            setIsRegistered(true);
+          } else {
+            sessionStorage.removeItem('mrdu_student_token');
+            setSessionToken(null);
+            setIsRegistered(false);
+          }
+        } else {
+          sessionStorage.removeItem('mrdu_student_token');
+          setSessionToken(null);
+          setIsRegistered(false);
+        }
+      } catch (err) {
+        // If server is unreachable on mount, require fresh registration
+        sessionStorage.removeItem('mrdu_student_token');
+        setSessionToken(null);
+        setIsRegistered(false);
+      } finally {
+        setIsCheckingSession(false);
+      }
+    };
+
+    validateExistingSession();
+  }, []);
+
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault();
+    setRegError('');
+    setRegSuccess('');
+
+    // Client-side validations
+    const cleanName = fullName.trim();
+    if (!cleanName || cleanName.length < 2) {
+      setRegError('Please enter your full name (at least 2 characters).');
+      return;
+    }
+
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setRegError('Please enter a valid email address.');
+      return;
+    }
+
+    const cleanMobile = mobileNumber.trim().replace(/[\s\-()]/g, '');
+    const nationalNumber = cleanMobile.startsWith('+91')
+      ? cleanMobile.slice(3)
+      : cleanMobile.startsWith('91') && cleanMobile.length === 12
+      ? cleanMobile.slice(2)
+      : cleanMobile.startsWith('0') && cleanMobile.length === 11
+      ? cleanMobile.slice(1)
+      : cleanMobile;
+
+    if (!/^[6-9]\d{9}$/.test(nationalNumber)) {
+      setRegError('Please enter a valid 10-digit Indian mobile number (e.g. 9876543210).');
+      return;
+    }
+
+    if (!consent) {
+      setRegError('Consent is required to continue to the admission assistant.');
+      return;
+    }
+
+    setIsSubmittingReg(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/students/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          full_name: cleanName,
+          email: cleanEmail,
+          mobile_number: `+91${nationalNumber}`,
+          interested_course: interestedCourse,
+          consent: true,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const message =
+          data.detail && typeof data.detail === 'string'
+            ? data.detail
+            : Array.isArray(data.detail)
+            ? data.detail.map((d) => d.msg || JSON.stringify(d)).join(', ')
+            : 'Registration failed. Please check your information and try again.';
+        setRegError(message);
+        setIsSubmittingReg(false);
+        return;
+      }
+
+      if (data.success && data.token) {
+        sessionStorage.setItem('mrdu_student_token', data.token);
+        setSessionToken(data.token);
+        setRegSuccess('Registration confirmed! Unlocking admission assistant...');
+        setTimeout(() => {
+          setIsRegistered(true);
+          setIsSubmittingReg(false);
+        }, 600);
+      } else {
+        setRegError('Failed to establish session. Please try again.');
+        setIsSubmittingReg(false);
+      }
+    } catch (err) {
+      setRegError('Unable to connect to the registration server. Please check your network.');
+      setIsSubmittingReg(false);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -176,10 +330,12 @@ function App() {
     };
 
     try {
+      const currentToken = sessionToken || sessionStorage.getItem('mrdu_student_token');
       const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
         },
         body: JSON.stringify({
           question: trimmedQuestion,
@@ -188,6 +344,14 @@ function App() {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          sessionStorage.removeItem('mrdu_student_token');
+          setSessionToken(null);
+          setIsRegistered(false);
+          setRegError('Your session has expired. Please register to continue.');
+          throw new Error('Your session has expired. Please register to continue.');
+        }
+
         let errorMessage =
           'Unable to connect to MRDU Assistant. Please try again later.';
 
@@ -541,11 +705,167 @@ function App() {
           </div>
 
           <div className="chat-body">
-            <AnimatePresence>
-              {messages.map((message) => (
-                <motion.div
-                  key={message.id}
-                  className={`message ${message.role}`}
+            {!isCheckingSession && !isRegistered ? (
+              <div className="chatbot-registration-container">
+                <div className="registration-header-inline">
+                  <div className="reg-badge-row">
+                    <span className="reg-brand-badge">
+                      <Sparkles size={12} /> MRDU Admissions AI
+                    </span>
+                  </div>
+                  <h2 id="reg-heading">Hi! 👋</h2>
+                  <p className="reg-subtitle">
+                    Your AI assistant is here to guide you through admissions.
+                  </p>
+                </div>
+
+                <div className="registration-body-inline">
+                  <div className="admission-guide-banner">
+                    <div className="admission-guide-title">
+                      <GraduationCap size={16} />
+                      <span>Your Smart Admission Guide</span>
+                    </div>
+                    <p className="admission-guide-desc">
+                      Ask questions, get instant answers, or explore admissions details tailored to your needs — all powered by AI.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleRegisterSubmit} className="registration-form" noValidate>
+                    {regError && (
+                      <div className="reg-error-box" role="alert">
+                        <span>{regError}</span>
+                      </div>
+                    )}
+
+                    {regSuccess && (
+                      <div className="reg-success-box" role="status">
+                        <span>{regSuccess}</span>
+                      </div>
+                    )}
+
+                    <div className="form-group">
+                      <label htmlFor="reg-fullname">
+                        Full Name <span className="required-star">*</span>
+                      </label>
+                      <div className="input-container">
+                        <User size={16} className="input-icon-prefix" />
+                        <input
+                          id="reg-fullname"
+                          type="text"
+                          placeholder="e.g. Rahul Sharma"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          required
+                          disabled={isSubmittingReg}
+                          autoComplete="name"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="reg-email">
+                        Email Address <span className="required-star">*</span>
+                      </label>
+                      <div className="input-container">
+                        <Mail size={16} className="input-icon-prefix" />
+                        <input
+                          id="reg-email"
+                          type="email"
+                          placeholder="e.g. student@example.com"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                          disabled={isSubmittingReg}
+                          autoComplete="email"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="reg-mobile">
+                        Mobile Number <span className="required-star">*</span>
+                      </label>
+                      <div className="mobile-input-wrapper">
+                        <span className="country-code-pill">+91</span>
+                        <input
+                          id="reg-mobile"
+                          type="tel"
+                          placeholder="9876543210"
+                          value={mobileNumber}
+                          onChange={(e) => setMobileNumber(e.target.value)}
+                          required
+                          disabled={isSubmittingReg}
+                          autoComplete="tel-national"
+                          maxLength={14}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="reg-course">
+                        Interested Course <span className="required-star">*</span>
+                      </label>
+                      <div className="input-container">
+                        <GraduationCap size={16} className="input-icon-prefix" />
+                        <select
+                          id="reg-course"
+                          value={interestedCourse}
+                          onChange={(e) => setInterestedCourse(e.target.value)}
+                          disabled={isSubmittingReg}
+                        >
+                          <option value="B.Tech">B.Tech</option>
+                          <option value="M.Tech">M.Tech</option>
+                          <option value="Not sure yet">Not sure yet</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="consent-row">
+                      <input
+                        id="reg-consent"
+                        type="checkbox"
+                        checked={consent}
+                        onChange={(e) => setConsent(e.target.checked)}
+                        required
+                        disabled={isSubmittingReg}
+                      />
+                      <label htmlFor="reg-consent" className="consent-text">
+                        I agree to share these details with MRDU to receive personalized admission assistance and, where applicable, official updates and follow-up regarding admissions.
+                      </label>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="continue-chat-btn"
+                      disabled={isSubmittingReg}
+                    >
+                      {isSubmittingReg ? (
+                        <>
+                          <span className="reg-spinner" />
+                          <span>Saving Registration...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Continue to Chat</span>
+                          <ArrowRight size={16} />
+                        </>
+                      )}
+                    </button>
+
+                    <p className="privacy-notice">
+                      <ShieldCheck size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+                      Your information is securely encrypted and used strictly for academic guidance. We never sell your data.
+                    </p>
+                  </form>
+                </div>
+              </div>
+            ) : (
+              <>
+                <AnimatePresence>
+                  {messages.map((message) => (
+                    <motion.div
+                      key={message.id}
+                      className={`message ${message.role}`}
                   initial={{ opacity: 0, y: 10, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ duration: 0.2 }}
@@ -666,7 +986,9 @@ function App() {
               </div>
             )}
 
-            <div ref={messagesEndRef} />
+                <div ref={messagesEndRef} />
+              </>
+            )}
           </div>
 
           <div className="chat-input-area">
@@ -674,7 +996,11 @@ function App() {
               <input
                 ref={inputRef}
                 type="text"
-                placeholder="Ask about admissions, fees, departments, exams..."
+                placeholder={
+                  !isRegistered
+                    ? "Complete registration above to chat with MRDU Assistant..."
+                    : "Ask about admissions, fees, departments, exams..."
+                }
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
@@ -682,7 +1008,7 @@ function App() {
                     handleSend(input);
                   }
                 }}
-                disabled={isLoading || isStreaming}
+                disabled={!isRegistered || isLoading || isStreaming}
                 aria-label="Chat input"
               />
 
@@ -695,7 +1021,7 @@ function App() {
               <button
                 className="send-btn"
                 onClick={() => handleSend(input)}
-                disabled={isLoading || isStreaming || !input.trim()}
+                disabled={!isRegistered || isLoading || isStreaming || !input.trim()}
                 aria-label="Send message"
               >
                 <Send size={16} />
@@ -708,4 +1034,4 @@ function App() {
   );
 }
 
-export default App;
+export default App;

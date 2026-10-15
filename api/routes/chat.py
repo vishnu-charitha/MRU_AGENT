@@ -1,14 +1,15 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 import logging
 from ..models import ChatRequest, ChatResponse, SourceModel
 from ..services.rag_service import get_rag_service
+from ..auth import require_student_session
 
 router = APIRouter()
 logger = logging.getLogger("api")
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(request: ChatRequest, student_id: str = Depends(require_student_session)):
     try:
         # We lazy-load the service so startup doesn't block immediately on imports if it fails
         rag_service = get_rag_service()
