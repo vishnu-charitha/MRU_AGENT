@@ -9,9 +9,17 @@ services:
         sync: false
       - key: QDRANT_API_KEY
         sync: false
+      - key: QDRANT_COLLECTION
+        value: mrdu_knowledge_base_v3
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_MODEL
         value: google/gemma-4-31b-it
+      - key: DATABASE_URL
+        sync: false
+      - key: AUTH_TOKEN_SECRET
+        generateValue: true
+      - key: AUTH_TOKEN_EXPIRE_MINUTES
+        value: "1440"
       - key: FRONTEND_URL
         sync: false
