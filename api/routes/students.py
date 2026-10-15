@@ -134,8 +134,10 @@ def register_student(request: StudentRegisterRequest, db: Session = Depends(get_
 
 
 @router.get("/students/session", response_model=SessionValidateResponse)
-def validate_student_session(student_id: str = Depends(require_student_session)):
+def validate_student_session(
+    student_id: str = Depends(require_student_session),
+):
     return SessionValidateResponse(
         valid=True,
-        student_id=student_id
+        student_id=student_id,
     )

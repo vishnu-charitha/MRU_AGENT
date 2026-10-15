@@ -1,8 +1,14 @@
 import os
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 import jwt
 from fastapi import Header, HTTPException, status, Depends
+from sqlalchemy.orm import Session
+
+from .database import get_db, StudentRegistration
+
+logger = logging.getLogger("api")
 
 SECRET_KEY = os.getenv("AUTH_TOKEN_SECRET")
 ALGORITHM = "HS256"
@@ -55,7 +61,10 @@ def decode_access_token(token: str) -> Dict[str, Any]:
         )
 
 
-def require_student_session(authorization: Optional[str] = Header(None)) -> str:
+def require_student_session(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+) -> str:
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -73,6 +82,16 @@ def require_student_session(authorization: Optional[str] = Header(None)) -> str:
 
     token = parts[1]
     payload = decode_access_token(token)
+
+    # Require JWT type claim to equal "student_session"
+    token_type = payload.get("type")
+    if token_type != "student_session":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     student_id = payload.get("sub")
     if not student_id:
         raise HTTPException(
@@ -81,4 +100,21 @@ def require_student_session(authorization: Optional[str] = Header(None)) -> str:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return student_id
+    # Ensure authenticated student ID corresponds to an existing StudentRegistration record
+    try:
+        student = db.query(StudentRegistration).filter(StudentRegistration.id == student_id).first()
+    except Exception as e:
+        logger.error(f"Database error during session validation: {type(e).__name__}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error while validating session."
+        )
+
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Student session is invalid or record does not exist.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return student.id
