@@ -46,7 +46,10 @@ async def chat_endpoint(request: ChatRequest, student_id: str = Depends(require_
         )
     except Exception as e:
         logger.exception("Retrieval failure")
-        raise HTTPException(status_code=500, detail="An error occurred while generating the response.")
+        raise HTTPException(
+            status_code=503,
+            detail="The knowledge base retrieval service is currently unavailable. Please check the vector database connection or try again shortly."
+        )
 
     try:
         return StreamingResponse(
@@ -55,4 +58,7 @@ async def chat_endpoint(request: ChatRequest, student_id: str = Depends(require_
         )
     except Exception as e:
         logger.exception("Answer streaming initialization failure")
-        raise HTTPException(status_code=500, detail="An error occurred while generating the response.")
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while initializing the response stream."
+        )
