@@ -11,41 +11,77 @@ logger = logging.getLogger("api")
 
 class RAGService:
     def __init__(self):
+        import time
         self.model_name = os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
         self.qdrant_url = os.getenv('QDRANT_URL')
         self.qdrant_key = os.getenv('QDRANT_API_KEY')
-        self.qdrant_collection = os.getenv('QDRANT_COLLECTION', 'mrdu_knowledge_base')
+        self.qdrant_collection = os.getenv('QDRANT_COLLECTION', 'mrdu_knowledge_base_v3')
         self.openrouter_key = os.getenv('OPENROUTER_API_KEY')
         self.openrouter_model = os.getenv('OPENROUTER_MODEL', 'google/gemma-4-31b-it')
+        
+        # Configurable timeouts
+        self.openrouter_connect_timeout = float(os.getenv('OPENROUTER_CONNECT_TIMEOUT', '10.0'))
+        self.openrouter_read_timeout = float(os.getenv('OPENROUTER_READ_TIMEOUT', '45.0'))
 
+        # 1. Qdrant connection and collection validation
         if not self.qdrant_url or not self.qdrant_key:
-            logger.warning("Qdrant configuration is missing.")
+            logger.warning("[RAG_INIT] Qdrant configuration is missing.")
+            self.qdrant_client = None
         else:
-            logger.info("Connecting to Qdrant...")
-            self.qdrant_client = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_key, timeout=60.0)
+            logger.info(f"[RAG_INIT] Connecting to Qdrant at {self.qdrant_url[:35]}...")
+            t_qd = time.time()
+            try:
+                self.qdrant_client = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_key, timeout=30.0)
+                # Validate collection exists
+                collections = [c.name for c in self.qdrant_client.get_collections().collections]
+                if self.qdrant_collection in collections:
+                    info = self.qdrant_client.get_collection(self.qdrant_collection)
+                    logger.info(f"[RAG_INIT] Qdrant connected in {time.time()-t_qd:.2f}s! Collection '{self.qdrant_collection}' active with {info.points_count} vectors.")
+                else:
+                    logger.error(f"[RAG_INIT] Configured collection '{self.qdrant_collection}' not found in Qdrant. Available collections: {collections}")
+            except Exception as e:
+                logger.error(f"[RAG_INIT] Failed to connect/validate Qdrant collection in {time.time()-t_qd:.2f}s: {e}")
+                self.qdrant_client = None
 
-        logger.info(f"Loading embedding model: {self.model_name}")
+        # 2. Embedding Model initialization
+        logger.info(f"[RAG_INIT] Loading embedding model: {self.model_name}")
+        t_emb = time.time()
         self.model = SentenceTransformer(self.model_name)
+        logger.info(f"[RAG_INIT] Embedding model loaded in {time.time()-t_emb:.2f}s")
 
+        # 3. Reranker initialization (configurable via ENABLE_RERANKER)
+        enable_reranker = os.getenv('ENABLE_RERANKER', 'true').strip().lower() in ('true', '1', 'yes')
         self.reranker_model_name = os.getenv('RERANKER_MODEL', 'cross-encoder/ms-marco-MiniLM-L-6-v2')
-        try:
-            from sentence_transformers import CrossEncoder
-            logger.info(f"Loading reranker model: {self.reranker_model_name}")
-            self.reranker = CrossEncoder(self.reranker_model_name)
-        except Exception as e:
-            logger.warning(f"Could not load reranker: {e}. Falling back to default retrieval.")
-            self.reranker = None
+        self.reranker = None
+        if enable_reranker:
+            try:
+                from sentence_transformers import CrossEncoder
+                logger.info(f"[RAG_INIT] Loading reranker model: {self.reranker_model_name}")
+                t_re = time.time()
+                self.reranker = CrossEncoder(self.reranker_model_name)
+                logger.info(f"[RAG_INIT] Reranker model loaded in {time.time()-t_re:.2f}s")
+            except Exception as e:
+                logger.warning(f"[RAG_INIT] Could not load reranker ({e}). Gracefully falling back to default vector retrieval.")
+                self.reranker = None
+        else:
+            logger.info("[RAG_INIT] Reranker disabled via ENABLE_RERANKER=false.")
 
+        # 4. OpenRouter / LLM Client initialization
         if not self.openrouter_key:
-            logger.warning("OpenRouter configuration is missing.")
+            logger.warning("[RAG_INIT] OpenRouter configuration is missing.")
 
         import httpx
-        logger.info("Initializing OpenAI client for OpenRouter...")
+        logger.info("[RAG_INIT] Initializing OpenAI client for OpenRouter...")
         self.llm_client = openai.OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=self.openrouter_key,
-            timeout=httpx.Timeout(connect=15.0, read=120.0, write=15.0, pool=15.0),
-            max_retries=2
+            timeout=httpx.Timeout(
+                connect=self.openrouter_connect_timeout,
+                read=self.openrouter_read_timeout,
+                write=10.0,
+                pool=10.0
+            ),
+            max_retries=1
         ) if self.openrouter_key else None
 
     def rewrite_query(self, query: str, history: list) -> str:
@@ -103,11 +139,13 @@ class RAGService:
 
 
     def retrieve(self, query: str, campus=None, category=None, program=None, regulation=None, limit=5):
-        if not hasattr(self, 'qdrant_client'):
-            logger.warning("Qdrant client not initialized. Cannot retrieve context.")
+        if not hasattr(self, 'qdrant_client') or self.qdrant_client is None:
+            logger.warning("[RETRIEVE] Qdrant client not initialized. Cannot retrieve context.")
             return []
 
         import re
+        import time
+        t_start = time.time()
         # Basic Query Expansion
         expanded_query = query.lower()
 
@@ -122,7 +160,10 @@ class RAGService:
         if re.search(r'\bcgpa\b|\bgpa\b', expanded_query):
             expanded_query += " sgpa cgpa computation academic regulations grade points"
 
+        t_emb_start = time.time()
         vec = self.model.encode(expanded_query, normalize_embeddings=True).tolist()
+        t_emb = time.time() - t_emb_start
+
         must_conditions = []
         if campus: must_conditions.append(FieldCondition(key="campus", match=MatchValue(value=campus)))
         if category: must_conditions.append(FieldCondition(key="category", match=MatchValue(value=category)))
@@ -132,17 +173,25 @@ class RAGService:
         query_filter = Filter(must=must_conditions) if must_conditions else None
 
         pre_rerank_limit = max(25, limit * 5)
+        t_qd_start = time.time()
         hits = self.qdrant_client.query_points(
             collection_name=self.qdrant_collection,
             query=vec,
             query_filter=query_filter,
             limit=pre_rerank_limit
         ).points
+        t_qd = time.time() - t_qd_start
 
-        if not hits or not self.reranker:
+        if not hits:
+            logger.info(f"[RETRIEVE] Embedding: {t_emb:.3f}s | Qdrant: {t_qd:.3f}s | Retrieved 0 points.")
+            return []
+
+        if not self.reranker:
+            logger.info(f"[RETRIEVE] Embedding: {t_emb:.3f}s | Qdrant: {t_qd:.3f}s | Retrieved {len(hits)} points (Reranker disabled). Total: {time.time()-t_start:.3f}s")
             return hits[:limit]
 
         # Rerank using the expanded query so aliases are evaluated correctly
+        t_re_start = time.time()
         pairs = [[expanded_query, h.payload.get('content', '')] for h in hits]
         scores = self.reranker.predict(pairs)
 
@@ -151,6 +200,8 @@ class RAGService:
             h.score = float(score)
 
         hits.sort(key=lambda x: x.score, reverse=True)
+        t_re = time.time() - t_re_start
+        logger.info(f"[RETRIEVE] Embedding: {t_emb:.3f}s | Qdrant: {t_qd:.3f}s | Reranker: {t_re:.3f}s | Total: {time.time()-t_start:.3f}s (returning top {min(limit, len(hits))})")
         return hits[:limit]
 
     def generate_answer(self, query: str, hits, history=None):
@@ -225,7 +276,9 @@ Context:
         messages.append({"role": "user", "content": query})
 
         if self.llm_client:
-            logger.info(f"Calling OpenRouter model {self.openrouter_model}...")
+            logger.info(f"[LLM] Calling OpenRouter model '{self.openrouter_model}'...")
+            import time
+            t_llm_start = time.time()
             try:
                 resp = self.llm_client.chat.completions.create(
                     model=self.openrouter_model,
@@ -233,11 +286,13 @@ Context:
                     temperature=0.0
                 )
                 llm_answer = resp.choices[0].message.content
+                logger.info(f"[LLM] OpenRouter response received in {time.time()-t_llm_start:.2f}s")
             except Exception as e:
-                logger.error(f"OpenRouter LLM error: {e}")
+                logger.error(f"[LLM] OpenRouter call failed after {time.time()-t_llm_start:.2f}s: {type(e).__name__}: {e}")
                 llm_answer = "The AI service is currently unavailable. Please try again in a few moments."
                 sources = []
         else:
+            logger.warning("[LLM] OpenRouter client not configured (missing API key).")
             llm_answer = "API key missing. Unable to generate answer."
 
         if llm_answer.strip().startswith("I couldn't find enough information in the MRDU knowledge base"):
@@ -318,7 +373,9 @@ Context:
         messages.append({"role": "user", "content": query})
 
         if self.llm_client:
-            logger.info(f"Calling OpenRouter model {self.openrouter_model} with stream=True...")
+            logger.info(f"[LLM_STREAM] Calling OpenRouter model '{self.openrouter_model}' (stream=True)...")
+            import time
+            t_stream_start = time.time()
             try:
                 resp = self.llm_client.chat.completions.create(
                     model=self.openrouter_model,
@@ -329,12 +386,16 @@ Context:
                     stream=True
                 )
                 full_answer = ""
+                chunk_count = 0
                 for chunk in resp:
-                    if chunk.choices[0].delta.content:
+                    if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
                         content_piece = chunk.choices[0].delta.content
                         full_answer += content_piece
+                        chunk_count += 1
                         yield json.dumps({"answer_chunk": content_piece}) + "\n"
-    
+
+                logger.info(f"[LLM_STREAM] Stream completed in {time.time()-t_stream_start:.2f}s ({chunk_count} chunks, {len(full_answer)} chars).")
+
                 if full_answer.strip().startswith("I couldn't find enough information in the MRDU knowledge base") or full_answer.strip().startswith("This topic is out of scope"):
                     yield json.dumps({"clear_sources": True}) + "\n"
                 else:
@@ -342,9 +403,10 @@ Context:
                     if followups:
                         yield json.dumps({"type": "followup_questions", "questions": followups}) + "\n"
             except Exception as e:
-                logger.error(f"OpenRouter LLM streaming error: {e}")
+                logger.error(f"[LLM_STREAM] OpenRouter streaming error after {time.time()-t_stream_start:.2f}s: {type(e).__name__}: {e}")
                 yield json.dumps({"error": "The AI service is currently unavailable. Please try again in a few moments."}) + "\n"
         else:
+            logger.warning("[LLM_STREAM] OpenRouter client not configured (missing API key).")
             yield json.dumps({"error": "API key missing. Unable to generate answer."}) + "\n"
 
     def generate_followup_questions(self, original_query: str, full_answer: str, history: list) -> list[str]:

@@ -67,8 +67,8 @@ def test_retrieval_failure(client, mock_rag_service):
     mock_rag_service.retrieve.side_effect = Exception("Qdrant connection refused")
     
     response = client.post("/api/chat", json={"question": "What is B.Tech?"})
-    assert response.status_code == 500
-    assert response.json()["detail"] == "An error occurred while generating the response."
+    assert response.status_code == 503
+    assert "retrieval service is currently unavailable" in response.json()["detail"]
 
 def test_llm_timeout_streaming_failure(client, mock_rag_service):
     mock_rag_service.retrieve.return_value = [MockHit(1.0)]
