@@ -16,7 +16,6 @@ import {
   Search,
   ArrowRight,
   Menu,
-  ExternalLink,
   RefreshCw,
   User,
   Mail,
@@ -880,40 +879,6 @@ function App() {
                     {message.out_of_scope && (
                       <div className="out-of-scope-warning">
                         This topic is outside the current MRDU knowledge scope.
-                      </div>
-                    )}
-
-                    {message.sources && message.sources.length > 0 && (
-                      <div className="sources-container">
-                        <div className="sources-title">Sources</div>
-
-                        <div className="sources-list">
-                          {message.sources.map((source, index) => {
-                            const hasUrl =
-                              source.url &&
-                              source.url !== 'Unknown URL' &&
-                              source.url !== '#';
-
-                            return (
-                              <a
-                                key={index}
-                                href={hasUrl ? source.url : '#'}
-                                target={hasUrl ? '_blank' : '_self'}
-                                rel="noreferrer"
-                                className="source-chip"
-                                title={source.title || 'Source'}
-                                onClick={(event) => {
-                                  if (!hasUrl) event.preventDefault();
-                                }}
-                              >
-                                <span className="source-chip-text">
-                                  {source.title || 'Source'}
-                                </span>
-                                {hasUrl && <ExternalLink size={10} />}
-                              </a>
-                            );
-                          })}
-                        </div>
                       </div>
                     )}
 
